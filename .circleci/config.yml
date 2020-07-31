@@ -15,16 +15,19 @@ jobs:
       - run:
           name: Cenerate crypto test materials
           command: |
+            ls -l
             export ORIGIN=${PWD}
             bash ./generate_crypto.sh
             cd ${ORIGIN}
-            sudo cp /export/* tests/fixtures/dynamic/
-            sudo chown ${USER} ./*
+            mkdir -p tests/fixtures/dynamic
+            sudo cp ${HOME}/export/* tests/fixtures/dynamic/
+            sudo chown -R `whoami` ${HOME}
       - run:
           name: Install deps and run unit and integration tests
           command: |
             pip3 install -r requirements-develop.txt
             pip3 install -r requirements-test.txt
+            pip3 install -r requirements-doc.txt
             pip3 install .
             python3 -m py.test --cov=dane_discovery --cov-report term-missing
       - run:

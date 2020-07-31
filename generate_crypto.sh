@@ -12,8 +12,8 @@
 LOCAL_DOMAIN="example.net"
 
 # Base paths
-CRYPTO_EXPORT_PATH="/export"
-CRYPTO_DIR="/root/crypto"
+CRYPTO_EXPORT_PATH="${HOME}/export"
+CRYPTO_DIR="${HOME}/crypto"
 LOCAL_CA_DIR="${CRYPTO_DIR}/local_ca"
 LOCAL_DEV_DIR="${CRYPTO_DIR}/local_dev"
 
@@ -62,6 +62,7 @@ cat /usr/lib/ssl/openssl.cnf
 ##############
 mkdir -p \
     ${CRYPTO_EXPORT_PATH} \
+    ${CRYPTO_DIR} \
     ${LOCAL_CA_DIR} \
     ${LOCAL_DEV_DIR} \
     ${LOCAL_CA_DIR}/demoCA/
