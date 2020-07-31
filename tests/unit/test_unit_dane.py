@@ -1,0 +1,75 @@
+"""Test the DANE object."""
+import os
+
+import pytest
+
+from dane_discovery.dane import DANE
+from dane_discovery.exceptions import TLSAError
+
+
+here_dir = os.path.dirname(os.path.abspath(__file__))
+dyn_assets_dir = os.path.join(here_dir, "../fixtures/dynamic/")
+identity_name = "abc123.air-quality-sensor._device.example.net"
+
+
+class TestUnitDane:
+    """Unit tests for DANE."""
+
+    def get_dyn_asset(self, asset_name):
+        """Return the contents of a file from the dynamic assets dir."""
+        asset_path = os.path.join(dyn_assets_dir, asset_name)
+        with open(asset_path, "rb") as asset:
+            return asset.read()
+
+    def test_unit_dane_generate_tlsa_record(self):
+        """Ensure that bytes are returned for matching type 0."""
+        certificate = self.get_dyn_asset("{}.cert.pem".format(identity_name))
+        result = DANE.generate_tlsa_record(3, 0, 0, certificate)
+        assert isinstance(result, str)
+
+    def test_unit_dane_generate_tlsa_record_sha256(self):
+        """Ensure that matching type 1 raises ValueError."""
+        certificate = self.get_dyn_asset("{}.cert.pem".format(identity_name))
+        with pytest.raises(TLSAError):
+            DANE.generate_tlsa_record(3, 0, 1, certificate)
+            assert False
+
+    def test_unit_dane_generate_tlsa_record_sha512(self):
+        """Ensure that matching type 2 raises ValueError."""
+        certificate = self.get_dyn_asset("{}.cert.pem".format(identity_name))
+        with pytest.raises(TLSAError):
+            DANE.generate_tlsa_record(3, 0, 2, certificate)
+            assert False
+
+    def test_unit_dane_generate_tlsa_record_bad(self):
+        """Ensure that bad matching type raises ValueError."""
+        certificate = self.get_dyn_asset("{}.cert.pem".format(identity_name))
+        with pytest.raises(TLSAError):
+            DANE.generate_tlsa_record(3, 0, 3, certificate)
+            assert False
+
+    def test_unit_dane_validate_bad_certificate(self):
+        """Ensure that bad cert raises ValueError."""
+        with pytest.raises(TLSAError):
+            DANE.validate_certificate("3082045130820339A00302010270E".encode())
+            assert False
+        with pytest.raises(TLSAError):
+            DANE.validate_certificate("abc123")
+            assert False
+
+    def test_unit_dane_build_bad_x509(self):
+        """Ensure that bad cert raises ValueError."""
+        with pytest.raises(TLSAError):
+            DANE.build_x509_object("abc123")
+            assert False
+
+    def test_unit_process_response(self):
+        """Test parsing a response."""
+        response = "3 1 2 55F6DB74C524ACCA28B52C0BCFC28EEC4596F90D00C 596F90D0"
+        cert_assoc = "55F6DB74C524ACCA28B52C0BCFC28EEC4596F90D00C596F90D0"
+        processed = DANE.process_response(response)
+        assert isinstance(processed, dict)
+        assert processed["certificate_usage"] == 3
+        assert processed["selector"] == 1
+        assert processed["matching_type"] == 2
+        assert processed["certificate_association"] == cert_assoc

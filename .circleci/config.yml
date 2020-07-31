@@ -1,0 +1,34 @@
+version: 2.1
+
+workflows:
+  version: 2
+  test_build:
+    jobs:
+      - "build_and_test"
+
+jobs:
+  "build_and_test":
+    docker:
+      - image: circleci/python:3.8
+    steps:
+      - checkout
+      - run:
+          name: Cenerate crypto test materials
+          command: |
+            export ORIGIN=${PWD}
+            bash ./generate_crypto.sh
+            cd ${ORIGIN}
+            sudo cp /export/* tests/fixtures/dynamic/
+            sudo chown ${USER} ./*
+      - run:
+          name: Install deps and run unit and integration tests
+          command: |
+            pip3 install -r requirements-develop.txt
+            pip3 install -r requirements-test.txt
+            pip3 install .
+            python3 -m py.test --cov=dane_discovery --cov-report term-missing
+      - run:
+          name: Test building docs
+          command: |
+            cd docs
+            make html
