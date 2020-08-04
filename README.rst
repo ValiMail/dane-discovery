@@ -34,3 +34,6 @@ Load a certificate from DNS and print the PEM representation
 
     der_cert = DANE.certificate_association_to_der(tlsa_record["certificate_association"])
     print(DANE.der_to_pem(der_cert))
+
+
+`More examples <https://dane-discovery.readthedocs.io/en/latest/getting_started.html>`_

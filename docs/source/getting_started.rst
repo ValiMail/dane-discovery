@@ -6,6 +6,8 @@ Getting Started
 Create a TLSA record
 --------------------
 
+Generate a TLSA record for a certificate.
+
 .. code-block:: python
 
   from dane_discovery.dane import DANE
@@ -14,8 +16,27 @@ Create a TLSA record
   print(DANE.generate_tlsa_record(3, 0, 0, certificate))
 
 
+TLSA to PEM
+-----------
+
+Load a certificate from DNS and print the PEM representation
+
+.. code-block:: python
+
+    from dane_discovery.dane import DANE
+    dns_name = "dns.name.where.a.cert.tlsa.can.be.found"
+    tlsa_record = DANE.get_first_leaf_certificate(dns_name)
+    if not tlsa_record:
+        raise ValueError("No leaf certificate found for {}.".format(dns_name))
+
+    der_cert = DANE.certificate_association_to_der(tlsa_record["certificate_association"])
+    print(DANE.der_to_pem(der_cert))
+
+
+TLSA to x.509
+-------------
+
 Generate an x.509 object from a certificate in a TLSA record
-------------------------------------------------------------
 
 .. code-block:: python
 
@@ -35,4 +56,5 @@ Further Exploration
 
 From the Certificate object we retrieved in the prior example, we can extract
 the public key, and read the various attributes of the certificate. For more
-information, continue reading `here <https://cryptography.io/en/latest/x509/reference/#x-509-certificate-object>`_`
+information, continue reading in the
+`Python cryptography library <https://cryptography.io/en/latest/x509/reference/#x-509-certificate-object>`_
