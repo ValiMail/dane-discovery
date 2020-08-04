@@ -75,6 +75,29 @@ class DANE:
         return tlsa_rr
 
     @classmethod
+    def get_first_leaf_certificate(cls, dnsname):
+        """Return the first leaf certificate from TLSA records at ``dnsname``.
+
+        This method essentially wraps
+        :func:`~dane_discovery.DANE.get_tlsa_records`, and returns the first
+        TLSA record with ``certificate_usage`` equal to ``1`` or ``3``, and
+        ``matching_type`` of ``0``.
+
+        Args:
+            dnsname (str): DNS name to query for certificate.
+
+        Return:
+            dict: Dictionary with keys for ``certificate_usage``, ``selector``,
+                ``matching_type``, ``certificate_association``.
+                If no leaf certificate is found, None is returned.
+        """
+        all_tlsa_records = cls.get_tlsa_records(dnsname)
+        for tlsa in all_tlsa_records:
+            if (tlsa["certificate_usage"] in [1, 3]
+                    and tlsa["matching_type"] == 0):
+                return tlsa
+
+    @classmethod
     def get_tlsa_records(cls, dnsname):
         """TLSA records in a list of dictionaries.
 
@@ -87,7 +110,7 @@ class DANE:
         Return:
             list of dict: Dictionaries with the following keys:
                 ``certificate_usage``, ``selector``, ``matching_type``,
-                ``certificate``.
+                ``certificate_association``.
 
         Raise:
             TLSAError if any errors are encountered in retrieval or parsing.
@@ -107,13 +130,38 @@ class DANE:
             print(response)
             resp_counter += 1
             result = cls.process_response(response)
-            # If the payload is actually a certificate, confirm that it loads.
+            # If the payload is actually a certificate, confirm that it parses.
             if result["matching_type"] == 0:
                 cert = result["certificate_association"]
                 cls.validate_certificate(cert)
-                result["certificate_association"] = binascii.unhexlify(cert)
             results.append(result.copy())
         return results
+
+    @classmethod
+    def certificate_association_to_der(cls, certificate_association):
+        """Return DER bytes from a TLSA record's ``certificate_association``.
+
+        Args:
+            certificate_association (str): Certificate association information
+                extracted from a TLSA record.
+
+        Return:
+            bytes: DER-formatted certificate.
+        """
+        return binascii.unhexlify(certificate_association)
+
+    @classmethod
+    def der_to_pem(cls, der_cert):
+        """Return the PEM representation of a TLSA certificate_association.
+
+        Args:
+            der (str): A certificate in DER format.
+
+        Return:
+            bytes: PEM-formatted certificate.
+        """
+        cert = cls.build_x509_object(der_cert)
+        return cert.public_bytes(serialization.Encoding.PEM)
 
     @classmethod
     def process_response(cls, response):
@@ -139,7 +187,7 @@ class DANE:
         """Raise TLSAError if certificate does not parse, or return None.
 
         Args:
-            certificate (str): Certificate.
+            certificate (str): Certificate association data from TLSA record.
 
         Return:
             None
@@ -148,7 +196,7 @@ class DANE:
             TLSAError if parsing fails.
         """
         try:
-            der = binascii.unhexlify(certificate)
+            der = cls.certificate_association_to_der(certificate)
             cls.build_x509_object(der)
         except (ValueError, binascii.Error) as err:
             msg = "Caught error '{}' with TLSA record.".format(err)
