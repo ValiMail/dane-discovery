@@ -135,12 +135,41 @@ class TestIntegrationDane:
 
     def test_integration_dane_get_tlsa_records_cert(self):
         """Get the TLSA records from other test site."""
-        test_dns_name = "butterfly.example.net"  # NOQA
+        test_dns_name = "butterfly.example.net"
         mock_resolver = dns.resolver
         mock_resolver.resolve = MagicMock(return_value=FakeTLSAShortAnswer())
         result = DANE.get_tlsa_records(test_dns_name)
         del mock_resolver.resolve
         assert isinstance(result, list)
+
+    def test_integration_dane_get_tlsa_leaf_cert(self):
+        """Get one TLSA record."""
+        test_dns_name = "butterfly.example.net"
+        mock_resolver = dns.resolver
+        mock_resolver.resolve = MagicMock(return_value=FakeTLSALongAnswer())
+        result = DANE.get_first_leaf_certificate(test_dns_name)
+        del mock_resolver.resolve
+        assert isinstance(result, dict)
+
+    def test_integration_dane_get_tlsa_leaf_cert_convert_pem(self):
+        """Get one TLSA record, convert to PEM."""
+        test_dns_name = "butterfly.example.net"
+        mock_resolver = dns.resolver
+        mock_resolver.resolve = MagicMock(return_value=FakeTLSALongAnswer())
+        cert = DANE.get_first_leaf_certificate(test_dns_name)
+        del mock_resolver.resolve
+        der_cert = DANE.certificate_association_to_der(cert["certificate_association"])  # NOQA
+        pem = DANE.der_to_pem(der_cert)
+        assert isinstance(pem, bytes)
+
+    def test_integration_dane_get_tlsa_record_leaf_cert_none(self):
+        """Get single TLSA record."""
+        test_dns_name = "butterfly.example.net"
+        mock_resolver = dns.resolver
+        mock_resolver.resolve = MagicMock(return_value=FakeTLSAShortAnswer())
+        result = DANE.get_first_leaf_certificate(test_dns_name)
+        del mock_resolver.resolve
+        assert result is None
 
     def test_integration_dane_generate_parse_tlsa_record(self):
         """Generate DANE record, attempt to parse."""
