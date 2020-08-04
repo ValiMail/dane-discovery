@@ -35,3 +35,7 @@ jobs:
           command: |
             cd docs
             make html
+      - run:
+          name: Trigger build in RTD
+          command: |
+            curl -X POST -d "branches=${CIRCLE_BRANCH}" -d "token=${RTD_TOKEN}" ${RTD_URL}
