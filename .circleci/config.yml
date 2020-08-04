@@ -4,10 +4,22 @@ workflows:
   version: 2
   test_build:
     jobs:
-      - "build_and_test"
+      - build_and_test:
+          filters:
+            tags:
+              only: /.*/
+      - deploy:
+          requires:
+            - build_and_test
+          filters:
+            tags:
+              only: /^v.*/
+            branches:
+              ignore: /.*/
+
 
 jobs:
-  "build_and_test":
+  build_and_test:
     docker:
       - image: circleci/python:3.8
     steps:
@@ -39,3 +51,24 @@ jobs:
           name: Trigger build in RTD
           command: |
             curl -X POST -d "branches=${CIRCLE_BRANCH}" -d "token=${RTD_TOKEN}" ${RTD_URL}
+  deploy:
+    docker:
+      - image: circleci/python:3.8
+    steps:
+      - checkout
+      - run:
+          name: Write PyPI config
+          command: |
+            echo -e "[pypi]" >> ~/.pypirc
+            echo -e "username = __token__" >> ~/.pypirc
+            echo -e "password = ${PYPI_TOKEN}" >> ~/.pypirc
+      - run:
+          name: Build sdist, wheel
+          command: |
+            python setup.py sdist
+            python setup.py bdist_wheel
+      - run:
+          name: Upload to pypi
+          command: |
+            pip3 install twine
+            twine upload dist/*
