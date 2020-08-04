@@ -3,7 +3,7 @@ dane-discovery
 ==============
 
 A library for using
-`DANE TLSA records<https://https://tools.ietf.org/html/rfc6698/>_` for
+`DANE TLSA records <https://tools.ietf.org/html/rfc6698>`_ for
 certificate discovery.
 
 Quick Start
