@@ -2,6 +2,12 @@
 dane-discovery
 ==============
 
+
+.. image:: https://readthedocs.org/projects/dane-discovery/badge/?version=latest
+    :target: https://dane-discovery.readthedocs.io/en/latest/?badge=latest
+    :alt: Documentation Status
+
+
 A library for using
 `DANE TLSA records <https://tools.ietf.org/html/rfc6698>`_ for
 certificate discovery.
