@@ -22,7 +22,7 @@ certificate discovery.
    :target: https://codeclimate.com/github/ValiMail/dane-discovery/test_coverage
    :alt: Test Coverage
 
-   
+
 Quick Start
 ===========
 
@@ -38,7 +38,7 @@ Load a certificate from DNS and print the PEM representation
 .. code-block:: python
 
     from dane_discovery.dane import DANE
-    dns_name = "butterfly.air-quality-sensor._mdevice.acme-manufacturing.net"
+    dns_name = "dns.name.having.a.tlsa.record"
     tlsa_record = DANE.get_first_leaf_certificate(dns_name)
     if not tlsa_record:
         raise ValueError("No leaf certificate found for {}.".format(dns_name))
