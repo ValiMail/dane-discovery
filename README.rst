@@ -13,6 +13,10 @@ certificate discovery.
     :alt: Documentation Status
 
 
+.. image:: https://circleci.com/gh/ValiMail/dane-discovery.svg?style=shield
+    :target: https://circleci.com/gh/ValiMail/dane-discovery
+
+
 .. image:: https://api.codeclimate.com/v1/badges/ec76c78dc4ac97b4b5f7/maintainability
     :target: https://codeclimate.com/github/ValiMail/dane-discovery/maintainability
     :alt: Maintainability

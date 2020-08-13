@@ -55,6 +55,37 @@ tlsa_record_shorts = [
     "3 1 1 9D0062CA1CED50C2EB6785B9985B1B59ED3A14E9F27114BCC162F8AC FFEF8683"]
 
 
+cert_sha256 = "67acae94572006c84d30c7eb2f043cf14fea7a5f6edf7e95b32e1f20ce6c49af"
+cert_sha512 = "a49585190f8bd020e813f35cb277f1bf11cdcde7253b9c8626dadd006bd1d1748ca87d275444836d71b7fa3fea8bdf43a0a35fe541aa31c606ffcc2dcc350df1"
+spki_sha256 = "9b2f169d699c8673f817cb3494fa1d9c89c4a46d2181b9461d73acf24fe63201"
+spki_sha512 = "0973a8d47cadefe9143050375b4620f5bdbc9bb350b6adf05424e564b165d45280092221bae2c94e734eda2afad0d18daddbadbbaa51d89b33c22e39ca40bcd9"
+sha_cert = """-----BEGIN CERTIFICATE-----
+MIIERzCCAi8CFBoapaaqjiyhO4KDRLlmyDrKNIyrMA0GCSqGSIb3DQEBCwUAMFMx
+CzAJBgNVBAYTAlVTMQswCQYDVQQIDAJDQTEZMBcGA1UECgwQRXhhbXBsZSBOZXR3
+b3JrczEcMBoGA1UEAwwTRXhhbXBsZSBOZXR3b3JrcyBDQTAeFw0yMDA4MTIyMDUy
+MjBaFw0yMTA4MjIyMDUyMjBaMG0xCzAJBgNVBAYTAlVTMQswCQYDVQQIDAJDQTEZ
+MBcGA1UECgwQRXhhbXBsZSBOZXR3b3JrczE2MDQGA1UEAwwtYWJjMTIzLmFpci1x
+dWFsaXR5LXNlbnNvci5fZGV2aWNlLmV4YW1wbGUubmV0MIIBIjANBgkqhkiG9w0B
+AQEFAAOCAQ8AMIIBCgKCAQEAr0uHeWsH5tnnIctqMLuwEUP9O3kr7eb8LLozxJus
+KX/bHz8pb2REBd+kAxAGkbneOZHsGKGgkOMyeAIV3+ptW/J/AOTL6I6Jq8jISLiX
+fxo3T6o8pJZBavlJh648TckkhWwp3tZo4sDlXaU5TiyWsKdEDX8b3F6vk566WwE3
+f6G3ni6tXOV7AwJaPj1MDJwkHwP7HeWWKpaWYKs/6Ll7OGx7bA5E5dKFtZrhn7CL
+lqqkuK/4S57wCpqzF2i/D4wqOWoTlONCssc/b0ZiP/gpIDd0i5MvDpgICdKIFM2U
+DcThDApIm0GFw/iTqbsPClI63Aju/Wp+7BMHhKAkwOtZuQIDAQABMA0GCSqGSIb3
+DQEBCwUAA4ICAQA6CKyWV1to4iWMCc522/hnF6L3BGNQ/L79rEMimZXvVT5EXuO+
+GVClc+s3GF9WlVEXx0ubAC3WLDhd9Hsgjd48+2Ax9aQfYVFuqOQSS8YrEQm+bIQG
+1Br38BuI0I/bdDmULfU4ANIcXEszmKdrS/UQBHXQ4b/dY1fxCgMAP7HbLem32QC5
+0tjlKIQbrhMP0i3eYhDdVR5SaIvMe3oax0CIIXkSvAeUyng2stLWj5CX7f1T+wGV
+MQ3BCO/Gsw4WUxyAwvx6rWlyc2I8PSyN5l7VaRbQc4VrlszLEjIAWZwtzstq/HI1
+RCFU2cl0aDV9w89NK256GUDf0ov9238LZLcF+LMZDueesOWPuvVdgJF/hReknZqx
+8kxNUyfGp/hNAcB2DIiGVEBbhDL5SEdfBKbDVlgJUmoyzEkUeGvfYExinuQx9/Bw
+OHl90ks1cNVCb3QIgNwxhf62n0xfDH9pFV3T+w3akek8yGSNt+c1xnetOLWqK/hT
+AkaRR/0BsIYmLut4yMttAZ2TvESmesFFn5Sv6qLqkvGPa/8OY6TLtP0ke5hLKCWG
+lXiVNLkJY58ZsWX6yaphAHiOD8iZR7wTYMO1bq0s3tvZUEBFhxIABGPZRXcLQXw4
+l+a1hqYCoeQ8Wts5m9v1t6T443Qp1hT53Zel5zhRHa3Pxvnh2NsEZ6idGA==
+-----END CERTIFICATE-----""".encode()
+
+
 class FakeRR:
     """Fake a single TLSA RR."""
 
@@ -114,11 +145,62 @@ class TestIntegrationDane:
         with open(asset_path, "rb") as asset:
             return asset.read()
 
+    def test_integration_dane_generate_sha_by_selector_0_1(self):
+        """Test generating SHA256 against the full cert."""
+        result = DANE.generate_sha_by_selector(sha_cert, "sha256", 0)
+        assert result == cert_sha256
+
+    def test_integration_dane_generate_sha_by_selector_0_2(self):
+        """Test generating SHA512 against the full cert."""
+        result = DANE.generate_sha_by_selector(sha_cert, "sha512", 0)
+        assert result == cert_sha512
+
+    def test_integration_dane_generate_sha_by_selector_1_1(self):
+        """Test generating SHA256 against the public key."""
+        result = DANE.generate_sha_by_selector(sha_cert, "sha256", 1)
+        assert result == spki_sha256
+
+    def test_integration_dane_generate_sha_by_selector_1_2(self):
+        """Test generating SHA512 against the public key."""
+        result = DANE.generate_sha_by_selector(sha_cert, "sha512", 1)
+        assert result == spki_sha512
+
+    def test_integration_dane_generate_sha_by_selector_bad_selector(self):
+        """Test bad selector."""
+        with pytest.raises(ValueError):
+            DANE.generate_sha_by_selector(sha_cert, "sha512", 2)
+            assert False
+
+    def test_integration_dane_generate_sha_by_selector_bad_matching_type(self):
+        """Test bad matching type."""
+        with pytest.raises(ValueError):
+            DANE.generate_sha_by_selector(sha_cert, "sha9999", 1)
+            assert False
+
+    def test_integration_dane_generate_tlsa_record_256(self):
+        """Test generating SHA256."""
+        assert DANE.generate_tlsa_record(0, 0, 1, sha_cert)
+
+    def test_integration_dane_generate_tlsa_record_512(self):
+        """Test generating SHA512."""
+        assert DANE.generate_tlsa_record(0, 0, 2, sha_cert)
+
     def test_integration_dane_get_tlsa_records_noexist(self):
         """Test failure handling for nonexistent records."""
         test_dns_name = "_443._tcp.example.net"
         mock_resolver = dns.resolver
         mock_resolver.resolve = MagicMock(return_value=FakeTLSAEmptyAnswer())
+        with pytest.raises(TLSAError):
+            DANE.get_tlsa_records(test_dns_name)
+            assert False
+        del mock_resolver.resolve
+
+    def test_integration_dane_get_tlsa_records_noanswer(self):
+        """Test failure handling for nonexistent records."""
+        test_dns_name = "_443._tcp.example.net"
+        mock_resolver = dns.resolver
+        mock_resolver.resolve = MagicMock(return_value=FakeTLSAEmptyAnswer())
+        mock_resolver.resolve.side_effect = dns.resolver.NoAnswer()
         with pytest.raises(TLSAError):
             DANE.get_tlsa_records(test_dns_name)
             assert False
