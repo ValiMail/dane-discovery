@@ -1,5 +1,6 @@
 """DANE class definition."""
 import binascii
+import hashlib
 
 import dns.resolver
 from cryptography import x509
@@ -61,11 +62,13 @@ class DANE:
         if matching_type == 0:
             certificate_association = binascii.hexlify(cert_bytes).decode()
         elif matching_type == 1:
-            errmsg = "Unsupported matching type: SHA-256."
-            raise TLSAError(errmsg)
+            certificate_association = cls.generate_sha_by_selector(certificate,
+                                                                   "sha256",
+                                                                   selector)
         elif matching_type == 2:
-            errmsg = "Unsupported matching type: SHA-512"
-            raise TLSAError(errmsg)
+            certificate_association = cls.generate_sha_by_selector(certificate,
+                                                                   "sha512",
+                                                                   selector)
         else:
             err_msg = "Invalid matching type {}.".format(matching_type)
             raise TLSAError(err_msg)
@@ -73,6 +76,37 @@ class DANE:
                                        matching_type,
                                        certificate_association)
         return tlsa_rr
+
+    @classmethod
+    def generate_sha_by_selector(cls, certificate, sha, selector):
+        """Return the SHA value appropriate for the selector.
+
+        Args:
+            certificate (bytes): Certificate in PEM or DER format.
+            sha (str): Valid values: ``sha256``, ``sha512``.
+            selector (int): Valid values: ``0``, ``1``. If ``0``, we
+                generate a SHA for the entire certificate. If ``1``, we
+                generate a SHA only on the public key in the certificate.
+
+        Return:
+            bytes: Base64 representation of SHA.
+        """
+        valid_selectors = [0, 1]
+        valid_hashing_algos = {"sha256": hashlib.sha256,
+                               "sha512": hashlib.sha512}
+        x509_obj = cls.build_x509_object(certificate)
+        if selector not in valid_selectors:
+            raise ValueError("Invalid selector.")
+        if sha not in valid_hashing_algos:
+            raise ValueError("Invalid sha.")
+        if selector == 0:
+            hashable = x509_obj.public_bytes(serialization.Encoding.DER)
+        elif selector == 1:
+            pubkey = x509_obj.public_key()
+            hashable = pubkey.public_bytes(serialization.Encoding.DER,
+                                           serialization.PublicFormat.SubjectPublicKeyInfo)  # NOQA
+        hash = valid_hashing_algos[sha](hashable).hexdigest()
+        return hash
 
     @classmethod
     def get_first_leaf_certificate(cls, dnsname):

@@ -27,20 +27,6 @@ class TestUnitDane:
         result = DANE.generate_tlsa_record(3, 0, 0, certificate)
         assert isinstance(result, str)
 
-    def test_unit_dane_generate_tlsa_record_sha256(self):
-        """Ensure that matching type 1 raises ValueError."""
-        certificate = self.get_dyn_asset("{}.cert.pem".format(identity_name))
-        with pytest.raises(TLSAError):
-            DANE.generate_tlsa_record(3, 0, 1, certificate)
-            assert False
-
-    def test_unit_dane_generate_tlsa_record_sha512(self):
-        """Ensure that matching type 2 raises ValueError."""
-        certificate = self.get_dyn_asset("{}.cert.pem".format(identity_name))
-        with pytest.raises(TLSAError):
-            DANE.generate_tlsa_record(3, 0, 2, certificate)
-            assert False
-
     def test_unit_dane_generate_tlsa_record_bad(self):
         """Ensure that bad matching type raises ValueError."""
         certificate = self.get_dyn_asset("{}.cert.pem".format(identity_name))
