@@ -1,8 +1,7 @@
 ###################################
 # This phase creates all the certs
 # and keys we'll use in a later
-# phase, for testing the ca_app
-# library.
+# phase.
 ###################################
 
 ##############
@@ -43,16 +42,7 @@ apt-get update && \
     openssl \
     tree
 
-##############
-# Fix OpenSSL
-# config for
-# CA signing
-##############
-# RUN cat /etc/ssl/openssl.cnf | \
-#    sed \
-#        -e 's/^\[ usr_cert \]/[ usr_cert ]\n\nsubjectAltName = DNS:copy/g' \
-#        -e 's/^\[ v3_req \]/[ v3_req ]\n\nsubjectAltName = DNS:copy/g' \
-#  | tee /usr/lib/ssl/openssl.cnf
+cp ssl.cnf /usr/lib/ssl/openssl.cnf
 cat /usr/lib/ssl/openssl.cnf
 
 
@@ -71,9 +61,9 @@ mkdir -p \
 # Drop dev
 # conf files
 ##############
-cp /usr/lib/ssl/openssl.cnf ${LOCAL_CA_DIR}/san.cnf
-echo "[ SAN ]\nsubjectAltName = DNS:${L_DIDN_ID}" >> ${LOCAL_CA_DIR}/san.cnf
-
+# cp /usr/lib/ssl/openssl.cnf ${LOCAL_CA_DIR}/san.cnf
+# echo "[ SAN ]\nsubjectAltName = DNS:${L_DIDN_ID}" >> ${LOCAL_CA_DIR}/san.cnf
+echo "[ alternate_names ]\nDNS.1: = ${L_DIDN_ID}" >> /usr/lib/ssl/openssl.cnf
 
 ##############
 # Create local
@@ -109,24 +99,20 @@ openssl req \
     -sha256 \
     -subj "/C=US/ST=CA/O=Example Networks/CN=${L_DIDN_ID}" \
     -addext "subjectAltName = DNS:${L_DIDN_ID}" \
+    -addext "keyUsage = nonRepudiation, digitalSignature, keyEncipherment" \
     -out ${LOCAL_DEV_CSR}
 echo "#################### LOCAL DEV CSR ####################"
 openssl req -noout -text -in ${LOCAL_DEV_CSR}
-openssl ca \
-    -extensions usr_cert \
-    -extensions v3_req \
-    -extensions SAN \
-    -days 375 \
-    -notext \
-    -md sha256 \
-    -keyfile ${LOCAL_CA_KEY} \
-    -cert ${LOCAL_CA_CERT} \
-    -outdir ${LOCAL_DEV_DIR} \
-    -create_serial \
-    -extfile ${LOCAL_CA_DIR}/san.cnf \
-    -batch \
-    -in ${LOCAL_DEV_CSR} \
-    -out ${LOCAL_DEV_CERT}
+openssl x509 \
+  -req \
+  -days 375 \
+  -in ${LOCAL_DEV_CSR} \
+  -CA ${LOCAL_CA_CERT} \
+  -CAkey ${LOCAL_CA_KEY} \
+  -CAcreateserial \
+  -extensions v3_req \
+  -extfile /usr/lib/ssl/openssl.cnf \
+  -out ${LOCAL_DEV_CERT}
 echo "#################### LOCAL DEV CERTIFICATE ####################"
 openssl x509 -noout -text -in ${LOCAL_DEV_CERT}
 
