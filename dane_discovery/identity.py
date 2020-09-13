@@ -50,7 +50,7 @@ class Identity:
                 "TCP: {}\n".format(self.dnssec, self.tls, self.tcp))
         cred_index = 0
         for cert in self.public_credentials:
-            fmt += ("Index: {}\n"
+            fmt += ("Credential index: {}\n"
                     " certificate usage: {}\n"
                     " selector: {}\n"
                     " matching type: {}\n".format(cred_index,
