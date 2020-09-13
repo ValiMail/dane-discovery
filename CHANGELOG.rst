@@ -2,8 +2,18 @@ Changelog
 =========
 
 
-v0.1
+v0.2
 ----
+
+New
+~~~
+- Support generating TLSA records for matching type 1, 2. [Ash Wilson]
+
+  Closes #3
+
+
+v0.1 (2020-08-04)
+-----------------
 
 New
 ~~~

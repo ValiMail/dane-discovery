@@ -12,6 +12,7 @@ Contents:
    installation
    getting_started
    object_dane
+   object_identity
    license
    changelog
 
