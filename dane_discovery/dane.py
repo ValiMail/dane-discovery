@@ -199,7 +199,9 @@ class DANE:
         flags = dns.flags.to_text(flags_int)
         query_details["dnssec"] = True if "AD" in flags.split() else False
         answer = resp_msg.answer
-        query_details["responses"] = [a.to_text() for a in answer]
+        # Parse out RRSIGs and such- we only want the exact RR types we initially requested.
+        query_details["responses"] = [a.to_text() for a in answer 
+                                      if rr_type in a.to_text().split(" ")[3]]
         return query_details
 
     @classmethod
