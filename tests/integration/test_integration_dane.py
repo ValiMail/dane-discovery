@@ -145,6 +145,18 @@ class TestIntegrationDane:
         with open(asset_path, "rb") as asset:
             return asset.read()
 
+    def generate_rrset(self, dnsname, rrtype, msgs):
+        """Return an rrset for testing."""
+        rrset = [dns.rrset.from_text(dnsname, 86400, 'IN', rrtype, msg)
+                 for msg in msgs]
+        return rrset
+
+    def generate_response(self, dnsname, rrtype, msgs):
+        """Return an rrset for testing."""
+        response = {"dnssec": False, "tcp": True, "tls": False,
+                    "responses": msgs}
+        return response
+
     def test_integration_dane_generate_sha_by_selector_0_1(self):
         """Test generating SHA256 against the full cert."""
         result = DANE.generate_sha_by_selector(sha_cert, "sha256", 0)
@@ -185,61 +197,66 @@ class TestIntegrationDane:
         """Test generating SHA512."""
         assert DANE.generate_tlsa_record(0, 0, 2, sha_cert)
 
+    def test_integration_dane_get_responses(self):
+        """Test get_responses for DNSSEC."""
+        test_dns_name = "pir.org"
+        responses = DANE.get_responses(test_dns_name, "A", "1.1.1.1")
+        assert "dnssec" in responses
+        assert responses["dnssec"] is True
+
     def test_integration_dane_get_tlsa_records_noexist(self):
         """Test failure handling for nonexistent records."""
         test_dns_name = "_443._tcp.example.net"
-        mock_resolver = dns.resolver
-        mock_resolver.resolve = MagicMock(return_value=FakeTLSAEmptyAnswer())
         with pytest.raises(TLSAError):
-            DANE.get_tlsa_records(test_dns_name)
+            result = DANE.get_tlsa_records(test_dns_name)
+            print(result)
             assert False
-        del mock_resolver.resolve
 
     def test_integration_dane_get_tlsa_records_noanswer(self):
         """Test failure handling for nonexistent records."""
         test_dns_name = "_443._tcp.example.net"
-        mock_resolver = dns.resolver
-        mock_resolver.resolve = MagicMock(return_value=FakeTLSAEmptyAnswer())
-        mock_resolver.resolve.side_effect = dns.resolver.NoAnswer()
         with pytest.raises(TLSAError):
-            DANE.get_tlsa_records(test_dns_name)
+            DANE.get_tlsa_records(test_dns_name, "127.0.0.1")
             assert False
-        del mock_resolver.resolve
 
     def test_integration_dane_get_tlsa_records_sha(self):
         """Process short records."""
         test_dns_name = "_443._tcp.www.example.net"
-        mock_resolver = dns.resolver
-        mock_resolver.resolve = MagicMock(return_value=FakeTLSAShortAnswer())
+        mock_dane = DANE
+        response = self.generate_response(test_dns_name, "TLSA",
+                                          tlsa_record_shorts)
+        mock_dane.get_responses = MagicMock(return_value=response)
         result = DANE.get_tlsa_records(test_dns_name)
-        del mock_resolver.resolve
         assert isinstance(result, list)
 
     def test_integration_dane_get_tlsa_records_cert(self):
         """Get the TLSA records from other test site."""
         test_dns_name = "butterfly.example.net"
-        mock_resolver = dns.resolver
-        mock_resolver.resolve = MagicMock(return_value=FakeTLSAShortAnswer())
+        mock_dane = DANE
+        response = self.generate_response(test_dns_name, "TLSA",
+                                          [tlsa_record_full])
+        mock_dane.get_responses = MagicMock(return_value=response)
         result = DANE.get_tlsa_records(test_dns_name)
-        del mock_resolver.resolve
         assert isinstance(result, list)
 
     def test_integration_dane_get_tlsa_leaf_cert(self):
         """Get one TLSA record."""
         test_dns_name = "butterfly.example.net"
-        mock_resolver = dns.resolver
-        mock_resolver.resolve = MagicMock(return_value=FakeTLSALongAnswer())
+        mock_dane = DANE
+        response = self.generate_response(test_dns_name, "TLSA",
+                                          [tlsa_record_full])
+        mock_dane.get_responses = MagicMock(return_value=response)
         result = DANE.get_first_leaf_certificate(test_dns_name)
-        del mock_resolver.resolve
         assert isinstance(result, dict)
 
     def test_integration_dane_get_tlsa_leaf_cert_convert_pem(self):
         """Get one TLSA record, convert to PEM."""
         test_dns_name = "butterfly.example.net"
-        mock_resolver = dns.resolver
-        mock_resolver.resolve = MagicMock(return_value=FakeTLSALongAnswer())
+        mock_dane = DANE
+        response = self.generate_response(test_dns_name, "TLSA",
+                                          [tlsa_record_full])
+        mock_dane.get_responses = MagicMock(return_value=response)
         cert = DANE.get_first_leaf_certificate(test_dns_name)
-        del mock_resolver.resolve
         der_cert = DANE.certificate_association_to_der(cert["certificate_association"])  # NOQA
         pem = DANE.der_to_pem(der_cert)
         assert isinstance(pem, bytes)
@@ -247,10 +264,11 @@ class TestIntegrationDane:
     def test_integration_dane_get_tlsa_record_leaf_cert_none(self):
         """Get single TLSA record."""
         test_dns_name = "butterfly.example.net"
-        mock_resolver = dns.resolver
-        mock_resolver.resolve = MagicMock(return_value=FakeTLSAShortAnswer())
+        mock_dane = DANE
+        response = self.generate_response(test_dns_name, "TLSA",
+                                          tlsa_record_shorts)
+        mock_dane.get_responses = MagicMock(return_value=response)
         result = DANE.get_first_leaf_certificate(test_dns_name)
-        del mock_resolver.resolve
         assert result is None
 
     def test_integration_dane_generate_parse_tlsa_record(self):

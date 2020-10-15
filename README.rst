@@ -51,4 +51,41 @@ Load a certificate from DNS and print the PEM representation
     print(DANE.der_to_pem(der_cert))
 
 
+    Load a DANE identity from DNS and print the request context
+    -----------------------------------------------------------
+
+.. code-block:: python
+
+    from dane_discovery.identity import Identity
+    dns_name = "dns.name.having.a.tlsa.record"
+    dane_identity = Identity(dns_name)
+    print(dane_identity)
+
+    Name: abc123.air-quality-sensor._device.example.net
+    Request context:
+      DNSSEC: False
+      TLS: False
+      TCP: True
+    Credential index: 0
+      certificate usage: DANE-EE
+      selector: Full certificate match
+      matching type: Exact match against certificate association
+      x509 attributes:
+        {'extensions': {'BasicConstrints': {'ca': False, 'path_length': None},
+                        'KeyUsage': {'content_commitment': True,
+                                     'crl_sign': False,
+                                     'data_encipherment': False,
+                                     'digital_signature': True,
+                                     'key_agreement': False,
+                                     'key_cert_sign': False,
+                                     'key_encipherment': True}},
+         'subject': {'commonName': 'abc123.air-quality-sensor._device.example.net',
+                     'countryName': 'US',
+                     'organizationName': 'Example Networks',
+                     'stateOrProvinceName': 'CA'}}
+
+
+
+
+
 `More examples <https://dane-discovery.readthedocs.io/en/latest/getting_started.html>`_
