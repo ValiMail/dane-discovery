@@ -51,7 +51,7 @@ class TestUnitDane:
 
     def test_unit_process_response(self):
         """Test parsing a response."""
-        response = "3 1 2 55F6DB74C524ACCA28B52C0BCFC28EEC4596F90D00C 596F90D0"
+        response = "name.example.com 123 IN TLSA 3 1 2 55F6DB74C524ACCA28B52C0BCFC28EEC4596F90D00C 596F90D0"
         cert_assoc = "55F6DB74C524ACCA28B52C0BCFC28EEC4596F90D00C596F90D0"
         processed = DANE.process_response(response)
         assert isinstance(processed, dict)

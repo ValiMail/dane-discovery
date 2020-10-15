@@ -24,7 +24,7 @@ class TestIntegrationIdentity:
         file_name = "{}.cert.pem".format(id_name)
         file_contents = self.get_dyn_asset(file_name)
         tlsa = DANE.generate_tlsa_record(3, 0, 0, file_contents)
-        return tlsa
+        return "name.example.com 123 IN TLSA {}".format(tlsa)
 
     def test_integration_identity_print_x509(self):
         """Test printing identity certificate metadata."""
