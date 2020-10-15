@@ -2,8 +2,16 @@ Changelog
 =========
 
 
-v0.3
+v0.4
 ----
+
+Fix
+~~~
+- Fix parsing of full DNS response message. [Ash Wilson]
+
+
+v0.3 (2020-10-15)
+-----------------
 
 New
 ~~~
