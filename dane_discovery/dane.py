@@ -236,11 +236,17 @@ class DANE:
             response (str): Response from DNS query.
 
         Return:
-            dict with keys for ``certificate_usage``, ``selector``,
+            dict with keys for ``name``, ``ttl``, ``class``, 
+                ``type``, ``certificate_usage``, ``selector``,
                 ``matching_types``, ``certificate_association``.
         """
         result = {}
+        
         resp_list = response.split(" ")
+        result["name"] = resp_list.pop(0)
+        result["ttl"] = int(resp_list.pop(0))
+        result["class"] = resp_list.pop(0)
+        result["type"] = resp_list.pop(0)
         result["certificate_usage"] = int(resp_list.pop(0))
         result["selector"] = int(resp_list.pop(0))
         result["matching_type"] = int(resp_list.pop(0))
