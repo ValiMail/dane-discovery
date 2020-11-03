@@ -2,6 +2,8 @@
 import pprint
 
 from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import padding
+from cryptography.exceptions import InvalidSignature
 
 from .dane import DANE
 
@@ -162,3 +164,24 @@ class Identity:
             setattr(self, field, tlsa_records[0][field])
         self.dane_credentials = [self.process_tlsa(record) for record
                                  in tlsa_records]
+
+    @classmethod
+    def verify_certificate_signature(cls, entity_certificate, ca_certificate):
+        """ Return True if entity_certificate was signed by ca_certificate.
+
+        Args:
+            entity_certificate (str): entity certificate in DER or PEM format.
+            ca_certificate (str): CA certificate in DER or PEM format.
+
+        Return: bool: True if the ca_certificate validates the entity_certificate.
+        """
+        issuer_public_key = DANE.build_x509_object(ca_certificate).public_key()
+        cert_to_check = DANE.build_x509_object(entity_certificate)
+        try:
+            issuer_public_key.verify(cert_to_check.signature,
+                cert_to_check.tbs_certificate_bytes, padding.PKCS1v15(),
+                cert_to_check.signature_hash_algorithm)
+        except InvalidSignature:
+            return False
+        return True
+
