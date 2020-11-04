@@ -1,6 +1,9 @@
 """Test the DANE object."""
 import os
 
+import pytest
+import requests_mock
+
 from dane_discovery.dane import DANE
 from dane_discovery.identity import Identity
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
@@ -56,3 +59,41 @@ class TestIntegrationIdentity:
         entity_certificate = self.get_dyn_asset("{}.cert.pem".format(identity_name))
         ca_certificate = self.get_dyn_asset("{}.cert.pem".format(identity_name))
         assert not Identity.verify_certificate_signature(entity_certificate, ca_certificate)
+    
+    def test_integration_identity_generate_url_for_ca_certificate(self):
+        """Test generation of the CA certificate URL."""
+        id_name = "123.testing.name._device.example.com"
+        auth_name = "https://authority._device.example.com/ca.pem"
+        result = Identity.generate_url_for_ca_certificate(id_name)
+        assert  result == auth_name
+
+    def test_integration_identity_generate_url_for_ca_certificate_malformed(self):
+        """Test failure of the CA certificate URL generator."""
+        id_name = "123.testing.name.devices.example.com"
+        with pytest.raises(ValueError):
+            Identity.generate_url_for_ca_certificate(id_name)
+            assert False
+
+    def test_integration_get_ca_certificate_for_identity_fail_valid(self):
+        """Test failure to get a CA certificate for a valid identity name."""
+        id_name = "123.testing._device.example.com"
+        with pytest.raises(ValueError):
+            Identity.get_ca_certificate_for_identity(id_name)
+            assert False
+
+    def test_integration_get_ca_certificate_for_identity_fail_invalid(self):
+        """Test failure to get a CA certificate for an invalid identity name."""
+        id_name = "123.testing.device.example.com"
+        with pytest.raises(ValueError):
+            Identity.get_ca_certificate_for_identity(id_name)
+            assert False
+
+    def test_integration_get_ca_certificate_for_identity_success(self, requests_mock):
+        """Test getting a CA certificate for an identity name."""
+        id_name = "123.testing._device.example.com"
+        ca_certificate = self.get_dyn_asset("{}.cert.pem".format(identity_name))
+        requests_mock.get("https://authority._device.example.com/ca.pem", 
+                          content=ca_certificate)
+        retrieved = Identity.get_ca_certificate_for_identity(id_name)
+        assert retrieved == ca_certificate
+        
