@@ -1,9 +1,13 @@
 """Identity abstraction."""
 import pprint
+import urllib
 
+from cryptography import x509
 from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.exceptions import InvalidSignature
+import requests
 
 from .dane import DANE
 
@@ -89,7 +93,7 @@ class Identity:
                  "key_encipherment"]
         oidname = x509_ext.oid._name
         if oidname == "basicConstraints":
-            return {"BasicConstrints": {"ca": x509_ext.value.ca,
+            return {"BasicConstraints": {"ca": x509_ext.value.ca,
                                         "path_length":
                                         x509_ext.value.path_length}}
         elif oidname == "extendedKeyUsage":
@@ -173,7 +177,8 @@ class Identity:
             entity_certificate (str): entity certificate in DER or PEM format.
             ca_certificate (str): CA certificate in DER or PEM format.
 
-        Return: bool: True if the ca_certificate validates the entity_certificate.
+        Return: 
+            bool: True if the ca_certificate validates the entity_certificate.
         """
         issuer_public_key = DANE.build_x509_object(ca_certificate).public_key()
         cert_to_check = DANE.build_x509_object(entity_certificate)
@@ -184,4 +189,77 @@ class Identity:
         except InvalidSignature:
             return False
         return True
+
+    @classmethod
+    def generate_url_for_ca_certificate(cls, dns_name):
+        """Return a URL for the identity's ca certificate.
+
+        An identity conforming to DANE PKIX-CD must have
+        the signing CA certificate available at a known 
+        location in DNS, relative to the identity itself.
+
+        This assumes the first underscore label found while
+        parsing from TLD toward hostname ( ``._device.``
+        for devices, or ``._service.``, or ``._whatever.``) 
+        to be the anchor label for constructing the URL 
+        where we expect to find the CA certificate that 
+        can be used to verify any PKIX-CD DANE records 
+        associated with ``dns_name``.
+
+        Args:
+            dns_name (str): DNS name of the identity.
+        
+        Raise:
+            ValueError if no underscore label in ``dns_name``.
+            
+        Return: 
+            str: URL where a CA certificate should be found.
+        """
+        # DNS name to labels
+        authority_dns_labels = []
+        identity_labels = dns_name.split(".")
+        identity_labels.reverse()
+        # Build DNS name from right to left, stopping at underscore label.
+        for label in identity_labels:
+            if label.startswith("_"):
+                authority_dns_labels.append(label)
+                authority_dns_labels.append("authority")
+                break
+            else:
+                authority_dns_labels.append(label)
+        if not authority_dns_labels[-1] == "authority":
+            raise ValueError("Malformed identity name {}.".format(dns_name))
+        authority_dns_labels.reverse()
+        authority_hostname = ".".join(authority_dns_labels)
+        authority_url = urllib.parse.urlunsplit(["https", authority_hostname, "ca.pem", "", ""])
+        return authority_url
+
+    @classmethod
+    def get_ca_certificate_for_identity(cls, identity_name):
+        """Return the CA certificate for verifying identity_name.
+        
+        Returns the PEM representation of the CA certificate
+        used for verifying any DANE PKIX-CD certificate 
+        associated with ``identity_name``.
+
+        Args:
+            identity_name (str): DNS name of identity.
+
+        Raise:
+            ValueError if no CA certificate is found or the
+                certificate is not parseable.
+
+        Return:
+            str: PEM of CA signing certificate.
+        """
+        authority_url = cls.generate_url_for_ca_certificate(identity_name)
+        try:
+            r = requests.get(authority_url)
+            presumed_pem = r.content
+            # The following line raises ValueError if it fails to parse.
+            x509.load_pem_x509_certificate(presumed_pem, default_backend()) 
+            return presumed_pem
+        except requests.exceptions.RequestException as err:
+            msg = "Error making request: {}".format(err)
+            raise ValueError(msg)
 
