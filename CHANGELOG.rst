@@ -2,8 +2,24 @@ Changelog
 =========
 
 
-v0.5
+v0.6
 ----
+
+New
+~~~
+- Add support for PKIX-CD. [Ash Wilson]
+
+  Breaking changes! Test thoroughly before updating to this version!
+
+  Close #20
+- Add Identity.get_ca_certificate_for_identity() [Ash Wilson]
+
+  Close #18
+- Add Identity.verify_certificate_signature(). [Ash Wilson]
+
+
+v0.5 (2020-10-15)
+-----------------
 
 Fix
 ~~~
