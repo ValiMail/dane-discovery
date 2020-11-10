@@ -1,19 +1,27 @@
 """Identity abstraction."""
 import pprint
+import urllib
 
+from cryptography import x509
 from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives.asymmetric import padding
+from cryptography.exceptions import InvalidSignature
+import requests
 
 from .dane import DANE
+from .exceptions import TLSAError
 
 
 class Identity:
     """Represent a DANE identity."""
 
     descr = {"certificate_usage":
-             {0: "CA Constraint.",
+             {0: "CA Constraint",
               1: "PKIX-EE",
               2: "DANE-TA",
-              3: "DANE-EE"},
+              3: "DANE-EE",
+              4: "PKIX-CD"},
              "selector":
              {0: "Full certificate match",
               1: "Public key match"},
@@ -37,10 +45,58 @@ class Identity:
         self.private_key = self.load_private_key(private_key)
         self.resolver_override = resolver_override
         self.public_credentials = []
-        self.set_public_credentials(dnsname, resolver_override)
+        self.set_public_credentials(self.dnsname, self.resolver_override)
 
-    def __repr__(self):
-        """Format a report for the identity.
+    def get_first_entity_certificate_by_type(self, cert_type, strict=False):
+        """Return the first certificate of ``cert_type` for the identity.
+        
+        Supported certificate types:
+            PKIX-EE: Corresponds with ``certificate_usage`` ``1``.
+            DANE-EE: Corresponds with ``certificate_usage`` ``3``.
+            PKIX-CD: Corresponds with ``certificate_usage`` ``4``.
+
+
+        Keyword args:
+            strict (bool): Raise TLSAError if certificate was not retrieved
+                with the benefit of DNSSEC, or in the case of PKIX-CD, if the
+                certificate can not be validated via PKI.
+        
+        Raise:
+            TLSAError: If strict is set to ``True`` and the certificate cannot
+                be validated by carrying a DNSSEC RRSIG. If ``certificate_usage`` 
+                is set to ``4``, PKIX validation may be attempted in lieu of 
+                DNSSEC.
+            ValueError: If ``cert_type`` is unsupported.
+        
+        Return:
+            str: PEM representation of a certificate matching the query criteria,
+                or an empty string if none can be found.
+        """
+        supported_certificate_types = {"PKIX-EE": 1, "DANE-EE": 3, "PKIX-CD": 4}
+        target = ""
+        # Verify that we're asked for something legitimate
+        if cert_type not in supported_certificate_types:
+            raise ValueError("Unsupported cert type {}".format(cert_type))
+        type_id = supported_certificate_types[cert_type]
+        # Find a matching credential
+        for cred in self.public_credentials:
+            if not cred["tlsa_parsed"]["matching_type"] == 0:
+                continue
+            target = cred if cred["tlsa_parsed"]["certificate_usage"] == type_id else ""
+            if target:
+                break
+        if not target:
+            return ""
+        if strict:
+            try:
+                target["tlsa_parsed"]["dnssec"] = self.dnssec
+                DANE.authenticate_tlsa(self.dnsname, target["tlsa_parsed"])
+            except ValueError as err:
+                raise TLSAError(err)
+        return target["public_key_object"]
+
+    def report(self):
+        """Return a report for the identity.
 
         Prints the query context (DNSSEC, etc) as well as information about
         the TLSA records stored at the identity's name.
@@ -50,10 +106,22 @@ class Identity:
                 "TCP: {}\n".format(self.dnssec, self.tls, self.tcp))
         cred_index = 0
         for cert in self.public_credentials:
+            validation_err = ""
+            cert["dnssec"] = self.dnssec
+            try:
+                DANE.authenticate_tlsa(self.dnsname, cert)
+            except ValueError as err:
+                validation_err = ["    {}".format(x) for x in str(err).splitlines()]
+                validation_err = "\n".join(validation_err)
+            validation_status = ("\n    Cryptographically validated." 
+                                 if not validation_err 
+                                 else "\n{}".format(validation_err))
             fmt += ("Credential index: {}\n"
+                    "validation status: {} \n"
                     " certificate usage: {}\n"
                     " selector: {}\n"
                     " matching type: {}\n".format(cred_index,
+                                                  validation_status,
                                                   cert["certificate_usage"],
                                                   cert["selector"],
                                                   cert["matching_type"]))
@@ -87,7 +155,7 @@ class Identity:
                  "key_encipherment"]
         oidname = x509_ext.oid._name
         if oidname == "basicConstraints":
-            return {"BasicConstrints": {"ca": x509_ext.value.ca,
+            return {"BasicConstraints": {"ca": x509_ext.value.ca,
                                         "path_length":
                                         x509_ext.value.path_length}}
         elif oidname == "extendedKeyUsage":
@@ -96,7 +164,6 @@ class Identity:
         elif oidname == "subjectAltName":
             return {"SubjectAltName": [oid.value for oid in x509_ext.value]}
         elif oidname == "keyUsage":
-            print(dir(x509_ext.value))
             return {"KeyUsage": {x: getattr(x509_ext.value, x) for x in usage}}
         return {x509_ext.oid._name: x509_ext.value}
 
@@ -124,8 +191,12 @@ class Identity:
     def process_tlsa(cls, tlsa_record):
         """Return a dictionary describing the TLSA record's contents.
 
+        Args:
+            tlsa_record (dict): Dictionary describing TLSA record contents.
+
         Dictionary keys:
-            ``tlsa_fields``: A list of raw fields from the TLSA record.
+            ``tlsa_fields``: TLSA record parsed into a list.
+            ``tlsa_parsed``: A dictionary of parsed TLSA record fields.
             ``certificate_usage``: Text description of the TLSA field.
             ``matching_type``: Text description of the TLSA field.
             ``selector``: Text description of the TLSA field.
@@ -134,12 +205,13 @@ class Identity:
                 this will be the same object as generated by
                 cryptography.hazmat.primitives.serialization.load_der_public_key()
         """
+        tlsa_fields = ["certificate_usage", "selector",
+                       "matching_type", "certificate_association"]
         cert_association = tlsa_record["certificate_association"]
         cert_der = DANE.certificate_association_to_der(cert_association)
         retval = {"certificate_metadata": None, "public_key_object": None}
-        retval["tlsa_fields"] = [tlsa_record[x] for x in
-                                 ["certificate_usage", "selector",
-                                  "matching_type", "certificate_association"]]
+        retval["tlsa_fields"] = [tlsa_record[x] for x in tlsa_fields]
+        retval["tlsa_parsed"] = tlsa_record.copy()
         for target in ["certificate_usage", "matching_type", "selector"]:
             retval[target] = cls.descr[target][int(tlsa_record[target])]
         if tlsa_record["matching_type"] == 0:
@@ -162,3 +234,5 @@ class Identity:
             setattr(self, field, tlsa_records[0][field])
         self.dane_credentials = [self.process_tlsa(record) for record
                                  in tlsa_records]
+
+    

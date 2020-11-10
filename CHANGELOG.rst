@@ -2,8 +2,16 @@ Changelog
 =========
 
 
-v0.4
+v0.5
 ----
+
+Fix
+~~~
+- Clean up parsing of TLSA records when DNSSEC is in use. [Ash Wilson]
+
+
+v0.4 (2020-10-15)
+-----------------
 
 Fix
 ~~~
