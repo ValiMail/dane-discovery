@@ -10,16 +10,18 @@ from cryptography.exceptions import InvalidSignature
 import requests
 
 from .dane import DANE
+from .exceptions import TLSAError
 
 
 class Identity:
     """Represent a DANE identity."""
 
     descr = {"certificate_usage":
-             {0: "CA Constraint.",
+             {0: "CA Constraint",
               1: "PKIX-EE",
               2: "DANE-TA",
-              3: "DANE-EE"},
+              3: "DANE-EE",
+              4: "PKIX-CD"},
              "selector":
              {0: "Full certificate match",
               1: "Public key match"},
@@ -43,10 +45,58 @@ class Identity:
         self.private_key = self.load_private_key(private_key)
         self.resolver_override = resolver_override
         self.public_credentials = []
-        self.set_public_credentials(dnsname, resolver_override)
+        self.set_public_credentials(self.dnsname, self.resolver_override)
 
-    def __repr__(self):
-        """Format a report for the identity.
+    def get_first_entity_certificate_by_type(self, cert_type, strict=False):
+        """Return the first certificate of ``cert_type` for the identity.
+        
+        Supported certificate types:
+            PKIX-EE: Corresponds with ``certificate_usage`` ``1``.
+            DANE-EE: Corresponds with ``certificate_usage`` ``3``.
+            PKIX-CD: Corresponds with ``certificate_usage`` ``4``.
+
+
+        Keyword args:
+            strict (bool): Raise TLSAError if certificate was not retrieved
+                with the benefit of DNSSEC, or in the case of PKIX-CD, if the
+                certificate can not be validated via PKI.
+        
+        Raise:
+            TLSAError: If strict is set to ``True`` and the certificate cannot
+                be validated by carrying a DNSSEC RRSIG. If ``certificate_usage`` 
+                is set to ``4``, PKIX validation may be attempted in lieu of 
+                DNSSEC.
+            ValueError: If ``cert_type`` is unsupported.
+        
+        Return:
+            str: PEM representation of a certificate matching the query criteria,
+                or an empty string if none can be found.
+        """
+        supported_certificate_types = {"PKIX-EE": 1, "DANE-EE": 3, "PKIX-CD": 4}
+        target = ""
+        # Verify that we're asked for something legitimate
+        if cert_type not in supported_certificate_types:
+            raise ValueError("Unsupported cert type {}".format(cert_type))
+        type_id = supported_certificate_types[cert_type]
+        # Find a matching credential
+        for cred in self.public_credentials:
+            if not cred["tlsa_parsed"]["matching_type"] == 0:
+                continue
+            target = cred if cred["tlsa_parsed"]["certificate_usage"] == type_id else ""
+            if target:
+                break
+        if not target:
+            return ""
+        if strict:
+            try:
+                target["tlsa_parsed"]["dnssec"] = self.dnssec
+                DANE.authenticate_tlsa(self.dnsname, target["tlsa_parsed"])
+            except ValueError as err:
+                raise TLSAError(err)
+        return target["public_key_object"]
+
+    def report(self):
+        """Return a report for the identity.
 
         Prints the query context (DNSSEC, etc) as well as information about
         the TLSA records stored at the identity's name.
@@ -56,10 +106,22 @@ class Identity:
                 "TCP: {}\n".format(self.dnssec, self.tls, self.tcp))
         cred_index = 0
         for cert in self.public_credentials:
+            validation_err = ""
+            cert["dnssec"] = self.dnssec
+            try:
+                DANE.authenticate_tlsa(self.dnsname, cert)
+            except ValueError as err:
+                validation_err = ["    {}".format(x) for x in str(err).splitlines()]
+                validation_err = "\n".join(validation_err)
+            validation_status = ("\n    Cryptographically validated." 
+                                 if not validation_err 
+                                 else "\n{}".format(validation_err))
             fmt += ("Credential index: {}\n"
+                    "validation status: {} \n"
                     " certificate usage: {}\n"
                     " selector: {}\n"
                     " matching type: {}\n".format(cred_index,
+                                                  validation_status,
                                                   cert["certificate_usage"],
                                                   cert["selector"],
                                                   cert["matching_type"]))
@@ -102,7 +164,6 @@ class Identity:
         elif oidname == "subjectAltName":
             return {"SubjectAltName": [oid.value for oid in x509_ext.value]}
         elif oidname == "keyUsage":
-            print(dir(x509_ext.value))
             return {"KeyUsage": {x: getattr(x509_ext.value, x) for x in usage}}
         return {x509_ext.oid._name: x509_ext.value}
 
@@ -130,8 +191,12 @@ class Identity:
     def process_tlsa(cls, tlsa_record):
         """Return a dictionary describing the TLSA record's contents.
 
+        Args:
+            tlsa_record (dict): Dictionary describing TLSA record contents.
+
         Dictionary keys:
-            ``tlsa_fields``: A list of raw fields from the TLSA record.
+            ``tlsa_fields``: TLSA record parsed into a list.
+            ``tlsa_parsed``: A dictionary of parsed TLSA record fields.
             ``certificate_usage``: Text description of the TLSA field.
             ``matching_type``: Text description of the TLSA field.
             ``selector``: Text description of the TLSA field.
@@ -140,12 +205,13 @@ class Identity:
                 this will be the same object as generated by
                 cryptography.hazmat.primitives.serialization.load_der_public_key()
         """
+        tlsa_fields = ["certificate_usage", "selector",
+                       "matching_type", "certificate_association"]
         cert_association = tlsa_record["certificate_association"]
         cert_der = DANE.certificate_association_to_der(cert_association)
         retval = {"certificate_metadata": None, "public_key_object": None}
-        retval["tlsa_fields"] = [tlsa_record[x] for x in
-                                 ["certificate_usage", "selector",
-                                  "matching_type", "certificate_association"]]
+        retval["tlsa_fields"] = [tlsa_record[x] for x in tlsa_fields]
+        retval["tlsa_parsed"] = tlsa_record.copy()
         for target in ["certificate_usage", "matching_type", "selector"]:
             retval[target] = cls.descr[target][int(tlsa_record[target])]
         if tlsa_record["matching_type"] == 0:
@@ -169,97 +235,4 @@ class Identity:
         self.dane_credentials = [self.process_tlsa(record) for record
                                  in tlsa_records]
 
-    @classmethod
-    def verify_certificate_signature(cls, entity_certificate, ca_certificate):
-        """ Return True if entity_certificate was signed by ca_certificate.
-
-        Args:
-            entity_certificate (str): entity certificate in DER or PEM format.
-            ca_certificate (str): CA certificate in DER or PEM format.
-
-        Return: 
-            bool: True if the ca_certificate validates the entity_certificate.
-        """
-        issuer_public_key = DANE.build_x509_object(ca_certificate).public_key()
-        cert_to_check = DANE.build_x509_object(entity_certificate)
-        try:
-            issuer_public_key.verify(cert_to_check.signature,
-                cert_to_check.tbs_certificate_bytes, padding.PKCS1v15(),
-                cert_to_check.signature_hash_algorithm)
-        except InvalidSignature:
-            return False
-        return True
-
-    @classmethod
-    def generate_url_for_ca_certificate(cls, dns_name):
-        """Return a URL for the identity's ca certificate.
-
-        An identity conforming to DANE PKIX-CD must have
-        the signing CA certificate available at a known 
-        location in DNS, relative to the identity itself.
-
-        This assumes the first underscore label found while
-        parsing from TLD toward hostname ( ``._device.``
-        for devices, or ``._service.``, or ``._whatever.``) 
-        to be the anchor label for constructing the URL 
-        where we expect to find the CA certificate that 
-        can be used to verify any PKIX-CD DANE records 
-        associated with ``dns_name``.
-
-        Args:
-            dns_name (str): DNS name of the identity.
-        
-        Raise:
-            ValueError if no underscore label in ``dns_name``.
-            
-        Return: 
-            str: URL where a CA certificate should be found.
-        """
-        # DNS name to labels
-        authority_dns_labels = []
-        identity_labels = dns_name.split(".")
-        identity_labels.reverse()
-        # Build DNS name from right to left, stopping at underscore label.
-        for label in identity_labels:
-            if label.startswith("_"):
-                authority_dns_labels.append(label)
-                authority_dns_labels.append("authority")
-                break
-            else:
-                authority_dns_labels.append(label)
-        if not authority_dns_labels[-1] == "authority":
-            raise ValueError("Malformed identity name {}.".format(dns_name))
-        authority_dns_labels.reverse()
-        authority_hostname = ".".join(authority_dns_labels)
-        authority_url = urllib.parse.urlunsplit(["https", authority_hostname, "ca.pem", "", ""])
-        return authority_url
-
-    @classmethod
-    def get_ca_certificate_for_identity(cls, identity_name):
-        """Return the CA certificate for verifying identity_name.
-        
-        Returns the PEM representation of the CA certificate
-        used for verifying any DANE PKIX-CD certificate 
-        associated with ``identity_name``.
-
-        Args:
-            identity_name (str): DNS name of identity.
-
-        Raise:
-            ValueError if no CA certificate is found or the
-                certificate is not parseable.
-
-        Return:
-            str: PEM of CA signing certificate.
-        """
-        authority_url = cls.generate_url_for_ca_certificate(identity_name)
-        try:
-            r = requests.get(authority_url)
-            presumed_pem = r.content
-            # The following line raises ValueError if it fails to parse.
-            x509.load_pem_x509_certificate(presumed_pem, default_backend()) 
-            return presumed_pem
-        except requests.exceptions.RequestException as err:
-            msg = "Error making request: {}".format(err)
-            raise ValueError(msg)
-
+    
