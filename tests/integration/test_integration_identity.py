@@ -6,6 +6,7 @@ import requests_mock
 
 from dane_discovery.dane import DANE
 from dane_discovery.identity import Identity
+from dane_discovery.exceptions import TLSAError
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
 
 
@@ -37,7 +38,7 @@ class TestIntegrationIdentity:
         tlsa_dict = DANE.process_response(self.tlsa_for_cert(identity_name))
         identity.public_credentials = [identity.process_tlsa(record) for record
                                        in [tlsa_dict]]
-        report = identity.__repr__()
+        report = identity.report()
         print(report)
         assert isinstance(report, str)
         assert "extension" in report
@@ -48,52 +49,39 @@ class TestIntegrationIdentity:
         key_obj = Identity.load_private_key(key_pem)
         assert isinstance(key_obj, RSAPrivateKey)
 
-    def test_integration_identity_verify_certificate_signature_success(self):
-        """Test CA signature validation success."""
-        entity_certificate = self.get_dyn_asset("{}.cert.pem".format(identity_name))
+    def test_integration_identity_get_entity_certificate_by_type_fail(self, requests_mock):
+        """Test getting entity certificate by type, and failing validation."""
+        identity = Identity(identity_name)
+        tlsa_dict = DANE.process_response(self.tlsa_for_cert(identity_name))
+        identity.public_credentials = [identity.process_tlsa(record) for record
+                                       in [tlsa_dict]]
+        identity.dnssec = False
+        identity.tls = True
+        identity.tcp = True
         ca_certificate = self.get_dyn_asset(ca_certificate_name)
-        assert Identity.verify_certificate_signature(entity_certificate, ca_certificate)
-
-    def test_integration_identity_verify_certificate_signature_fail(self):
-        """Test CA signature validation failure."""
-        entity_certificate = self.get_dyn_asset("{}.cert.pem".format(identity_name))
-        ca_certificate = self.get_dyn_asset("{}.cert.pem".format(identity_name))
-        assert not Identity.verify_certificate_signature(entity_certificate, ca_certificate)
-    
-    def test_integration_identity_generate_url_for_ca_certificate(self):
-        """Test generation of the CA certificate URL."""
-        id_name = "123.testing.name._device.example.com"
-        auth_name = "https://authority._device.example.com/ca.pem"
-        result = Identity.generate_url_for_ca_certificate(id_name)
-        assert  result == auth_name
-
-    def test_integration_identity_generate_url_for_ca_certificate_malformed(self):
-        """Test failure of the CA certificate URL generator."""
-        id_name = "123.testing.name.devices.example.com"
-        with pytest.raises(ValueError):
-            Identity.generate_url_for_ca_certificate(id_name)
-            assert False
-
-    def test_integration_get_ca_certificate_for_identity_fail_valid(self):
-        """Test failure to get a CA certificate for a valid identity name."""
-        id_name = "123.testing._device.example.com"
-        with pytest.raises(ValueError):
-            Identity.get_ca_certificate_for_identity(id_name)
-            assert False
-
-    def test_integration_get_ca_certificate_for_identity_fail_invalid(self):
-        """Test failure to get a CA certificate for an invalid identity name."""
-        id_name = "123.testing.device.example.com"
-        with pytest.raises(ValueError):
-            Identity.get_ca_certificate_for_identity(id_name)
-            assert False
-
-    def test_integration_get_ca_certificate_for_identity_success(self, requests_mock):
-        """Test getting a CA certificate for an identity name."""
-        id_name = "123.testing._device.example.com"
-        ca_certificate = self.get_dyn_asset("{}.cert.pem".format(identity_name))
-        requests_mock.get("https://authority._device.example.com/ca.pem", 
+        requests_mock.get("https://authority.device.example.net/ca.pem", 
                           content=ca_certificate)
-        retrieved = Identity.get_ca_certificate_for_identity(id_name)
-        assert retrieved == ca_certificate
-        
+        with pytest.raises(TLSAError):
+            identity.get_first_entity_certificate_by_type("DANE-EE", strict=True)
+            print(identity.report())
+
+    def test_integration_identity_get_entity_certificate_by_type(self):
+        """Test getting entity certificate by type, present and absent, strict."""
+        identity = Identity(identity_name)
+        print("Identity: {}".format(identity_name))
+        tlsa_dict = DANE.process_response(self.tlsa_for_cert(identity_name))
+        print("TLSA: {}".format(tlsa_dict))
+        identity.public_credentials = [identity.process_tlsa(record) for record
+                                       in [tlsa_dict]]
+        identity.dnssec = True
+        identity.tls = True
+        identity.tcp = True
+        # We get a cert here.
+        cert = identity.get_first_entity_certificate_by_type("DANE-EE", strict=True)
+        print(cert)
+        assert cert != ""
+        # And here we don't have a match.
+        cert = identity.get_first_entity_certificate_by_type("PKIX-EE", strict=True)
+        assert cert == ""
+
+    

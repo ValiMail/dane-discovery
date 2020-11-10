@@ -1,12 +1,16 @@
 """DANE class definition."""
 import binascii
 import hashlib
+import requests
+import urllib
 
 import dns.resolver
 import dns.dnssec
 from cryptography import x509
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import padding
+from cryptography.exceptions import InvalidSignature
 
 from .exceptions import TLSAError
 
@@ -115,8 +119,8 @@ class DANE:
 
         This method essentially wraps
         :func:`~dane_discovery.DANE.get_tlsa_records`, and returns the first
-        TLSA record with ``certificate_usage`` equal to ``1`` or ``3``, and
-        ``matching_type`` of ``0``.
+        TLSA record with ``certificate_usage`` equal to ``1``, ``3``, or ``4``
+        and ``matching_type`` of ``0``.
 
         Args:
             dnsname (str): DNS name to query for certificate.
@@ -128,7 +132,7 @@ class DANE:
         """
         all_tlsa_records = cls.get_tlsa_records(dnsname)
         for tlsa in all_tlsa_records:
-            if (tlsa["certificate_usage"] in [1, 3]
+            if (tlsa["certificate_usage"] in [1, 3, 4]
                     and tlsa["matching_type"] == 0):
                 return tlsa
 
@@ -274,3 +278,150 @@ class DANE:
         except (ValueError, binascii.Error) as err:
             msg = "Caught error '{}' with TLSA record.".format(err)
             raise TLSAError(msg)
+
+    @classmethod
+    def authenticate_tlsa(cls, dns_name, record):
+        """Return None if the identity is authenticated, or raise ValueError.
+
+        This method authenticates a TLSA record as follows:
+
+        Any record that is correctly-formatted and delivered with
+        DNSSEC will pass authentication.
+
+        Any record delivered without DNSSEC must have:
+        ``certificate_usage`` = ``4``, ``selector`` = ``0``,
+        and ``matching_type`` = ``0``. Additionally, the 
+        ``certificate_association`` field must contain a certificate
+        which bears a signature which can be authenticated by the 
+        certificate found at ``https://authority.device.${DOMAIN}/ca.pem``.
+
+        Any TLSA RRs having ``certificate_usage`` == ``4`` must only have
+        ``selector`` == ``0`` and ``matching_type`` == ``0``. Any deviation
+        will cause validation failure.
+
+        Args:
+            dns_name (str): DNS name associated with the TLSA record.
+            record (dict): Keys for ``certificate_usage``, ``selector``, 
+                ``matching_type``, ``certificate_association``, 
+                and ``dnssec``.
+        
+        Return:
+            None if this identity can be cryptographically authenticated.
+
+        Raise:
+            ValueError if the identity can not be cryptographically authenticated.
+        """
+        if record["dnssec"] is True:
+            return
+        errmsg = ""
+        c_usg = record["certificate_usage"]
+        if record["certificate_usage"] != 4:
+            errmsg += "{} identity represented without DNSSEC, unable to validate.\n".format(c_usg)
+        if record["selector"] != 0:
+            errmsg += "{} identity only permits a 'selector value' of 0.\n".format(c_usg)
+        if record["matching_type"] != 0:
+            errmsg += "{} identity only permits a 'matching type' value of 0.\n".format(c_usg)
+        ca_cert = cls.get_ca_certificate_for_identity(dns_name)
+        id_cert = cls.der_to_pem(cls.certificate_association_to_der(record["certificate_association"]))
+        if not cls.verify_certificate_signature(id_cert, ca_cert):
+            errmsg += "PKIX validation for identity failed.\n"
+        if errmsg:
+            raise ValueError(errmsg)
+        return
+    
+    @classmethod
+    def verify_certificate_signature(cls, entity_certificate, ca_certificate):
+        """ Return True if entity_certificate was signed by ca_certificate.
+
+        Args:
+            entity_certificate (str): entity certificate in DER or PEM format.
+            ca_certificate (str): CA certificate in DER or PEM format.
+
+        Return: 
+            bool: True if the ca_certificate validates the entity_certificate.
+        """
+        issuer_public_key = DANE.build_x509_object(ca_certificate).public_key()
+        cert_to_check = DANE.build_x509_object(entity_certificate)
+        try:
+            issuer_public_key.verify(cert_to_check.signature,
+                cert_to_check.tbs_certificate_bytes, padding.PKCS1v15(),
+                cert_to_check.signature_hash_algorithm)
+        except InvalidSignature:
+            return False
+        return True
+
+    @classmethod
+    def generate_url_for_ca_certificate(cls, dns_name):
+        """Return a URL for the identity's ca certificate.
+
+        An identity conforming to DANE PKIX-CD must have
+        the signing CA certificate available at a known 
+        location in DNS, relative to the identity itself.
+
+        This assumes the first underscore label found while
+        parsing from TLD toward hostname ( ``._device.``
+        for devices, or ``._service.``, or ``._whatever.``) 
+        to be the anchor label for constructing the URL 
+        where we expect to find the CA certificate that 
+        can be used to verify any PKIX-CD DANE records 
+        associated with ``dns_name``.
+
+        Args:
+            dns_name (str): DNS name of the identity.
+        
+        Raise:
+            ValueError if no underscore label in ``dns_name``.
+            
+        Return: 
+            str: URL where a CA certificate should be found.
+        """
+        # DNS name to labels
+        authority_dns_labels = []
+        identity_labels = dns_name.split(".")
+        identity_labels.reverse()
+        # Build DNS name from right to left, stopping at underscore label.
+        for label in identity_labels:
+            if label.startswith("_"):
+                authority_dns_labels.append(label.replace("_", ""))
+                authority_dns_labels.append("authority")
+                break
+            else:
+                authority_dns_labels.append(label)
+        if not authority_dns_labels[-1] == "authority":
+            raise ValueError("Malformed identity name {}.".format(dns_name))
+        authority_dns_labels.reverse()
+        authority_hostname = ".".join(authority_dns_labels)
+        authority_url = urllib.parse.urlunsplit(["https", authority_hostname, "ca.pem", "", ""])
+        return authority_url
+
+    @classmethod
+    def get_ca_certificate_for_identity(cls, identity_name):
+        """Return the CA certificate for verifying identity_name.
+        
+        Returns the PEM representation of the CA certificate
+        used for verifying any DANE PKIX-CD certificate 
+        associated with ``identity_name``.
+
+        Args:
+            identity_name (str): DNS name of identity.
+
+        Raise:
+            ValueError if no CA certificate is found or the
+                certificate is not parseable.
+
+        Return:
+            str: PEM of CA signing certificate.
+        """
+        authority_url = cls.generate_url_for_ca_certificate(identity_name)
+        try:
+            r = requests.get(authority_url)
+            presumed_pem = r.content
+            # The following line raises ValueError if it fails to parse.
+            x509.load_pem_x509_certificate(presumed_pem, default_backend()) 
+            return presumed_pem
+        except requests.exceptions.RequestException as err:
+            msg = "Error making request: {}".format(err)
+            raise ValueError(msg)
+
+
+
