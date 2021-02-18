@@ -28,8 +28,8 @@ crl		= $dir/crl.pem 		# The current CRL
 private_key	= $dir/private/cakey.pem# The private key
 
 x509_extensions	= usr_cert		# The extensions to add to the cert
-# x509_extensions	= v3_req, usr_cert
-copy_extensions = copy
+
+copy_extensions = copyall
 
 name_opt 	= ca_default		# Subject Name options
 cert_opt 	= ca_default		# Certificate field options
@@ -67,7 +67,6 @@ distinguished_name	= req_distinguished_name
 attributes		= req_attributes
 x509_extensions	= v3_ca	# The extensions to add to the self signed cert
 req_extensions  = v3_req
-x509_extensions = usr_cert
 
 string_mask = utf8only
 
@@ -108,11 +107,12 @@ unstructuredName		= An optional company name
 basicConstraints=CA:FALSE
 nsCertType                      = client, server, email
 keyUsage = nonRepudiation, digitalSignature, keyEncipherment
-nsComment                       = "OpenSSL Generated Certificate"
+nsComment                       = "OpenSSL cert"
 subjectKeyIdentifier=hash
-authorityKeyIdentifier=keyid,issuer
+authorityKeyIdentifier = keyid,issuer
+subjectAltName = @alternate_names
 
-subjectAltName = DNS:copy
+
 
 [ v3_req ]
 
@@ -121,11 +121,8 @@ subjectAltName = DNS:copy
 basicConstraints = CA:FALSE
 keyUsage = nonRepudiation, digitalSignature, keyEncipherment
 
-subjectAltName = DNS:copy
 
 [ v3_ca ]
-
-subjectAltName = @alternate_names
 
 # Extensions for a typical CA
 
@@ -146,7 +143,7 @@ authorityKeyIdentifier=keyid:always
 
 basicConstraints=CA:FALSE
 
-nsComment			= "OpenSSL Generated Certificate"
+nsComment			= "OpenSSL cert"
 
 # PKIX recommendations harmless if included in all certificates.
 subjectKeyIdentifier=hash

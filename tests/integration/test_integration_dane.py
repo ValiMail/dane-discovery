@@ -15,7 +15,9 @@ from dane_discovery.exceptions import TLSAError
 
 here_dir = os.path.dirname(os.path.abspath(__file__))
 dyn_assets_dir = os.path.join(here_dir, "../fixtures/dynamic/")
-identity_name = "abc123.air-quality-sensor._device.example.net"
+rsa_identity_name = "rsa.air-quality-sensor._device.example.net"
+ecc_identity_name = "ecc.air-quality-sensor._device.example.net"
+identity_names = [rsa_identity_name, ecc_identity_name]
 ca_certificate_name = "ca.example.net.cert.pem"
 tlsa_record_full = (
     "red._device.example.com. 373 IN TLSA 3 0 0 308203863082026ea00"
@@ -274,92 +276,129 @@ class TestIntegrationDane:
 
     def test_integration_dane_generate_parse_tlsa_record(self):
         """Generate DANE record, attempt to parse."""
-        certificate = self.get_dyn_asset("{}.cert.pem".format(identity_name))
-        generated = DANE.generate_tlsa_record(3, 0, 0, certificate)
-        full_record = "name.example.com 123 IN TLSA {}".format(generated)
-        parsed = DANE.process_response(full_record)
-        assert DANE.validate_certificate(parsed["certificate_association"]) is None  # NOQA
-        der_cert = binascii.unhexlify(parsed["certificate_association"])
-        x5_obj = DANE.build_x509_object(der_cert)
-        assert isinstance(x5_obj, Certificate)
+        for identity_name in identity_names:
+            certificate = self.get_dyn_asset("{}.cert.pem".format(identity_name))
+            generated = DANE.generate_tlsa_record(3, 0, 0, certificate)
+            full_record = "name.example.com 123 IN TLSA {}".format(generated)
+            parsed = DANE.process_response(full_record)
+            assert DANE.validate_certificate(parsed["certificate_association"]) is None  # NOQA
+            der_cert = binascii.unhexlify(parsed["certificate_association"])
+            x5_obj = DANE.build_x509_object(der_cert)
+            assert isinstance(x5_obj, Certificate)
 
     def test_integration_dane_verify_certificate_signature_success(self):
         """Test CA signature validation success."""
-        entity_certificate = self.get_dyn_asset("{}.cert.pem".format(identity_name))
-        ca_certificate = self.get_dyn_asset(ca_certificate_name)
-        assert DANE.verify_certificate_signature(entity_certificate, ca_certificate)
+        for identity_name in identity_names:
+            print("Checking signature of {}'s certificate".format(identity_name))
+            entity_certificate = self.get_dyn_asset("{}.cert.pem".format(identity_name))
+            ca_certificate = self.get_dyn_asset(ca_certificate_name)
+            assert DANE.verify_certificate_signature(entity_certificate, ca_certificate)
+            print("Success.")
 
     def test_integration_dane_verify_certificate_signature_fail(self):
         """Test CA signature validation failure."""
-        entity_certificate = self.get_dyn_asset("{}.cert.pem".format(identity_name))
-        ca_certificate = self.get_dyn_asset("{}.cert.pem".format(identity_name))
-        assert not DANE.verify_certificate_signature(entity_certificate, ca_certificate)
+        for identity_name in identity_names:
+            print("Checking signature of {}'s certificate".format(identity_name))
+            entity_certificate = self.get_dyn_asset("{}.cert.pem".format(identity_name))
+            ca_certificate = self.get_dyn_asset("{}.cert.pem".format(identity_name))
+            assert not DANE.verify_certificate_signature(entity_certificate, ca_certificate)
+            print("Failed, as expected.")
     
     def test_integration_dane_generate_url_for_ca_certificate(self):
         """Test generation of the CA certificate URL."""
-        id_name = "123.testing.name._device.example.com"
-        auth_name = "https://authority.device.example.com/ca.pem"
-        result = DANE.generate_url_for_ca_certificate(id_name)
+        authority_hostname = "authority.device.example.com"
+        aki = "aa-bc-de-00-12-34"
+        auth_name = "https://authority.device.example.com/ca/aa-bc-de-00-12-34.pem"
+        result = DANE.generate_url_for_ca_certificate(authority_hostname, aki)
         assert  result == auth_name
 
-    def test_integration_dane_generate_url_for_ca_certificate_malformed(self):
-        """Test failure of the CA certificate URL generator."""
+    def test_integration_dane_generate_authority_hostname_malformed(self):
+        """Test failure of the authority hostname generator."""
         id_name = "123.testing.name.devices.example.com"
         with pytest.raises(ValueError):
-            DANE.generate_url_for_ca_certificate(id_name)
+            DANE.generate_authority_hostname(id_name)
             assert False
 
     def test_integration_dane_get_ca_certificate_for_identity_fail_valid(self):
         """Test failure to get a CA certificate for a valid identity name."""
-        id_name = "123.testing._device.example.com"
+        id_name = rsa_identity_name
+        cert = self.get_dyn_asset("{}.cert.pem".format(id_name))
         with pytest.raises(ValueError):
-            DANE.get_ca_certificate_for_identity(id_name)
+            DANE.get_ca_certificate_for_identity(id_name, cert)
             assert False
 
     def test_integration_dane_get_ca_certificate_for_identity_fail_invalid(self):
         """Test failure to get a CA certificate for an invalid identity name."""
         id_name = "123.testing.device.example.com"
+        aki = "aa-bc-de-00-12-34"
         with pytest.raises(ValueError):
-            DANE.get_ca_certificate_for_identity(id_name)
+            DANE.get_ca_certificate_for_identity(id_name, aki)
             assert False
 
     def test_integration_dane_get_ca_certificate_for_identity_success(self, requests_mock):
         """Test getting a CA certificate for an identity name."""
-        id_name = "123.testing._device.example.com"
-        ca_certificate = self.get_dyn_asset("{}.cert.pem".format(identity_name))
-        requests_mock.get("https://authority.device.example.com/ca.pem", 
-                          content=ca_certificate)
-        retrieved = DANE.get_ca_certificate_for_identity(id_name)
-        assert retrieved == ca_certificate
+        for id_name in identity_names:
+            id_cert = self.get_dyn_asset("{}.cert.pem".format(id_name))
+            aki = DANE.get_authority_key_id_from_certificate(id_cert)
+            ca_certificate = self.get_dyn_asset("{}.cert.pem".format(id_name))
+            requests_mock.get("https://authority.device.example.net/ca/{}.pem".format(aki), 
+                              content=ca_certificate)
+            retrieved = DANE.get_ca_certificate_for_identity(id_name, id_cert)
+            assert retrieved == ca_certificate
     
     def test_integration_dane_authenticate_tlsa_pkix_cd(self, requests_mock):
         """Test successful authentication of pkix-cd."""
-        id_name = "abc123.air-quality-sensor._device.example.net"
-        entity_certificate = self.get_dyn_asset("{}.cert.pem".format(id_name))
-        x509_obj = DANE.build_x509_object(entity_certificate)
-        ca_certificate = self.get_dyn_asset("ca.example.net.cert.pem")
-        requests_mock.get("https://authority.device.example.net/ca.pem", 
-                          content=ca_certificate)
-        cert_bytes = x509_obj.public_bytes(encoding=serialization.Encoding.DER)
-        certificate_association = binascii.hexlify(cert_bytes).decode()
-        tlsa_record = {"certificate_usage": 4, "selector": 0, "matching_type": 0, 
-                       "certificate_association": certificate_association}
-        tlsa_record["dnssec"] = False
-        assert DANE.authenticate_tlsa(id_name, tlsa_record) is None
+        for id_name in identity_names:
+            entity_certificate = self.get_dyn_asset("{}.cert.pem".format(id_name))
+            aki = DANE.get_authority_key_id_from_certificate(entity_certificate)
+            x509_obj = DANE.build_x509_object(entity_certificate)
+            ca_certificate = self.get_dyn_asset("ca.example.net.cert.pem")
+            requests_mock.get("https://authority.device.example.net/ca/{}.pem".format(aki), 
+                              content=ca_certificate)
+            cert_bytes = x509_obj.public_bytes(encoding=serialization.Encoding.DER)
+            certificate_association = binascii.hexlify(cert_bytes).decode()
+            tlsa_record = {"certificate_usage": 4, "selector": 0, "matching_type": 0, 
+                           "certificate_association": certificate_association}
+            tlsa_record["dnssec"] = False
+            assert DANE.authenticate_tlsa(id_name, tlsa_record) is None
 
     def test_integration_dane_authenticate_tlsa_pkix_cd_fail(self, requests_mock):
-        """Test successful authentication of pkix-cd."""
-        id_name = "abc123.air-quality-sensor._device.example.net"
-        entity_certificate = self.get_dyn_asset("{}.cert.pem".format(id_name))
-        x509_obj = DANE.build_x509_object(entity_certificate)
-        ca_certificate = self.get_dyn_asset("{}.cert.pem".format(id_name))
-        requests_mock.get("https://authority.device.example.net/ca.pem", 
-                          content=ca_certificate)
-        cert_bytes = x509_obj.public_bytes(encoding=serialization.Encoding.DER)
-        certificate_association = binascii.hexlify(cert_bytes).decode()
-        tlsa_record = {"certificate_usage": 4, "selector": 0, "matching_type": 0, 
-                       "certificate_association": certificate_association}
-        tlsa_record["dnssec"] = False
-        with pytest.raises(ValueError):
-            DANE.authenticate_tlsa(id_name, tlsa_record)
-            assert False
+        """Test failed authentication of pkix-cd."""
+        for id_name in identity_names:
+            entity_certificate = self.get_dyn_asset("{}.cert.pem".format(id_name))
+            aki = DANE.get_authority_key_id_from_certificate(entity_certificate)
+            x509_obj = DANE.build_x509_object(entity_certificate)
+            ca_certificate = self.get_dyn_asset("{}.cert.pem".format(id_name))
+            requests_mock.get("https://authority.device.example.net/ca/{}.pem".format(aki),
+                              content=ca_certificate)
+            cert_bytes = x509_obj.public_bytes(encoding=serialization.Encoding.DER)
+            certificate_association = binascii.hexlify(cert_bytes).decode()
+            tlsa_record = {"certificate_usage": 4, "selector": 0, "matching_type": 0, 
+                           "certificate_association": certificate_association}
+            tlsa_record["dnssec"] = False
+            with pytest.raises(TLSAError):
+                DANE.authenticate_tlsa(id_name, tlsa_record)
+                assert False
+
+    def test_integration_dane_authenticate_tlsa_ee_fail(self, requests_mock):
+        """Test failed authentication of ee cert."""
+        for id_name in identity_names:
+            entity_certificate = self.get_dyn_asset("{}.cert.pem".format(id_name))
+            x509_obj = DANE.build_x509_object(entity_certificate)
+            cert_bytes = x509_obj.public_bytes(encoding=serialization.Encoding.DER)
+            certificate_association = binascii.hexlify(cert_bytes).decode()
+            tlsa_record = {"certificate_usage": 4, "selector": 1, "matching_type": 1, 
+                           "certificate_association": certificate_association}
+            tlsa_record["dnssec"] = False
+            with pytest.raises(TLSAError):
+                DANE.authenticate_tlsa(id_name, tlsa_record)
+                assert False
+
+    def test_integration_dane_match_ski_aki(self):
+        """Test matching the AKI of a cert to the SKI of its signing CA."""
+        for id_name in identity_names:
+            ee_cert = self.get_dyn_asset("{}.cert.pem".format(id_name))
+            ca_cert = self.get_dyn_asset("ca.example.net.cert.pem")
+            ee_aki = DANE.get_authority_key_id_from_certificate(ee_cert)
+            ca_ski = DANE.get_subject_key_id_from_certificate(ca_cert)
+            assert ee_aki == ca_ski
