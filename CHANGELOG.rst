@@ -2,8 +2,22 @@ Changelog
 =========
 
 
-v0.6
+v0.7
 ----
+
+New
+~~~
+- Add certificate_object to output from Identity.process_tlsa() [Ash
+  Wilson]
+
+  Close #23
+- Add support for EC certificates and keys. [Ash Wilson]
+
+  Close #24
+
+
+v0.6 (2020-11-10)
+-----------------
 
 New
 ~~~
