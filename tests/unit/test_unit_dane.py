@@ -9,7 +9,9 @@ from dane_discovery.exceptions import TLSAError
 
 here_dir = os.path.dirname(os.path.abspath(__file__))
 dyn_assets_dir = os.path.join(here_dir, "../fixtures/dynamic/")
-identity_name = "abc123.air-quality-sensor._device.example.net"
+rsa_identity_name = "rsa.air-quality-sensor._device.example.net"
+ecc_identity_name = "ecc.air-quality-sensor._device.example.net"
+identity_names = [rsa_identity_name, ecc_identity_name]
 
 
 class TestUnitDane:
@@ -23,19 +25,21 @@ class TestUnitDane:
 
     def test_unit_dane_generate_tlsa_record(self):
         """Ensure that bytes are returned for matching type 0."""
-        certificate = self.get_dyn_asset("{}.cert.pem".format(identity_name))
-        result = DANE.generate_tlsa_record(3, 0, 0, certificate)
-        assert isinstance(result, str)
+        for identity_name in identity_names:
+            certificate = self.get_dyn_asset("{}.cert.pem".format(identity_name))
+            result = DANE.generate_tlsa_record(3, 0, 0, certificate)
+            assert isinstance(result, str)
 
     def test_unit_dane_generate_tlsa_record_bad(self):
         """Ensure that bad matching type raises ValueError."""
-        certificate = self.get_dyn_asset("{}.cert.pem".format(identity_name))
-        with pytest.raises(TLSAError):
-            DANE.generate_tlsa_record(3, 0, 3, certificate)
-            assert False
+        for identity_name in identity_names:
+            certificate = self.get_dyn_asset("{}.cert.pem".format(identity_name))
+            with pytest.raises(TLSAError):
+                DANE.generate_tlsa_record(3, 0, 3, certificate)
+                assert False
 
     def test_unit_dane_validate_bad_certificate(self):
-        """Ensure that bad cert raises ValueError."""
+        """Ensure that failed validation raises TLSAError."""
         with pytest.raises(TLSAError):
             DANE.validate_certificate("3082045130820339A00302010270E".encode())
             assert False
@@ -45,7 +49,7 @@ class TestUnitDane:
 
     def test_unit_dane_build_bad_x509(self):
         """Ensure that bad cert raises ValueError."""
-        with pytest.raises(TLSAError):
+        with pytest.raises(ValueError):
             DANE.build_x509_object("abc123")
             assert False
 

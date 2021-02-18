@@ -1,3 +1,4 @@
+set -xe
 ###################################
 # This phase creates all the certs
 # and keys we'll use in a later
@@ -14,14 +15,16 @@ LOCAL_DOMAIN="example.net"
 CRYPTO_EXPORT_PATH="${HOME}/export"
 CRYPTO_DIR="${HOME}/crypto"
 LOCAL_CA_DIR="${CRYPTO_DIR}/local_ca"
-LOCAL_DEV_DIR="${CRYPTO_DIR}/local_dev"
+DEV_DIR="${CRYPTO_DIR}/device"
 
 # General device info
-DEVICE_SERIAL="abc123"
+RSA_DEVICE_SERIAL="rsa"
 DEVICE_MODEL="air-quality-sensor"
+ECC_DEVICE_SERIAL="ecc"
 
 # Building DIDN-IDs for devices
-L_DIDN_ID="${DEVICE_SERIAL}.${DEVICE_MODEL}._device.${LOCAL_DOMAIN}"
+RSA_DIDN_ID="${RSA_DEVICE_SERIAL}.${DEVICE_MODEL}._device.${LOCAL_DOMAIN}"
+ECC_DIDN_ID="${ECC_DEVICE_SERIAL}.${DEVICE_MODEL}._device.${LOCAL_DOMAIN}"
 
 # Specific file paths
 
@@ -29,10 +32,22 @@ L_DIDN_ID="${DEVICE_SERIAL}.${DEVICE_MODEL}._device.${LOCAL_DOMAIN}"
 LOCAL_CA_KEY="${LOCAL_CA_DIR}/ca.example.net.key.pem"
 LOCAL_CA_CERT="${LOCAL_CA_DIR}/ca.example.net.cert.pem"
 
-## Local Dev
-LOCAL_DEV_KEY="${LOCAL_DEV_DIR}/${L_DIDN_ID}.key.pem"
-LOCAL_DEV_CSR="${LOCAL_DEV_DIR}/${L_DIDN_ID}.csr.pem"
-LOCAL_DEV_CERT="${LOCAL_DEV_DIR}/${L_DIDN_ID}.cert.pem"
+## RSA Dev
+RSA_DEV_KEY="${DEV_DIR}/${RSA_DIDN_ID}.key.pem"
+RSA_DEV_CSR="${DEV_DIR}/${RSA_DIDN_ID}.csr.pem"
+RSA_DEV_CERT="${DEV_DIR}/${RSA_DIDN_ID}.cert.pem"
+
+## ECC Dev
+ECC_DEV_KEY="${DEV_DIR}/${ECC_DIDN_ID}.key.pem"
+ECC_DEV_CSR="${DEV_DIR}/${ECC_DIDN_ID}.csr.pem"
+ECC_DEV_CERT="${DEV_DIR}/${ECC_DIDN_ID}.cert.pem"
+
+# Signing configurations
+RSA_SSL_CONFIG="${DEV_DIR}/${RSA_DIDN_ID}.conf"
+ECC_SSL_CONFIG="${DEV_DIR}/${ECC_DIDN_ID}.conf"
+
+mkdir -p ${LOCAL_CA_DIR}/demoCA/
+echo "05" > ${LOCAL_CA_DIR}/demoCA/serial 
 
 ##############
 # Install OpenSSL
@@ -42,7 +57,7 @@ apt-get update && \
     openssl \
     tree
 
-cp ssl.cnf /usr/lib/ssl/openssl.cnf
+sudo cp ssl.cnf /usr/lib/ssl/openssl.cnf
 cat /usr/lib/ssl/openssl.cnf
 
 
@@ -54,16 +69,8 @@ mkdir -p \
     ${CRYPTO_EXPORT_PATH} \
     ${CRYPTO_DIR} \
     ${LOCAL_CA_DIR} \
-    ${LOCAL_DEV_DIR} \
+    ${DEV_DIR} \
     ${LOCAL_CA_DIR}/demoCA/
-
-##############
-# Drop dev
-# conf files
-##############
-# cp /usr/lib/ssl/openssl.cnf ${LOCAL_CA_DIR}/san.cnf
-# echo "[ SAN ]\nsubjectAltName = DNS:${L_DIDN_ID}" >> ${LOCAL_CA_DIR}/san.cnf
-echo "[ alternate_names ]\nDNS.1: = ${L_DIDN_ID}" >> /usr/lib/ssl/openssl.cnf
 
 ##############
 # Create local
@@ -87,44 +94,91 @@ touch ${LOCAL_CA_DIR}/demoCA/index.txt.attr
 
 ##############
 # Create local
-# device
+# device RSA 2048
 ##############
 cd ${LOCAL_CA_DIR}
 openssl genrsa \
-    -out ${LOCAL_DEV_KEY} \
+    -out ${RSA_DEV_KEY} \
     2048
 openssl req \
-    -key ${LOCAL_DEV_KEY} \
+    -key ${RSA_DEV_KEY} \
     -new \
     -sha256 \
-    -subj "/C=US/ST=CA/O=Example Networks/CN=${L_DIDN_ID}" \
-    -addext "subjectAltName = DNS:${L_DIDN_ID}" \
+    -subj "/C=US/ST=CA/O=Example Networks/CN=${RSA_DIDN_ID}" \
+    -addext "subjectAltName = DNS:${RSA_DIDN_ID}" \
     -addext "keyUsage = nonRepudiation, digitalSignature, keyEncipherment" \
-    -out ${LOCAL_DEV_CSR}
-echo "#################### LOCAL DEV CSR ####################"
-openssl req -noout -text -in ${LOCAL_DEV_CSR}
-openssl x509 \
-  -req \
-  -days 375 \
-  -in ${LOCAL_DEV_CSR} \
-  -CA ${LOCAL_CA_CERT} \
-  -CAkey ${LOCAL_CA_KEY} \
-  -CAcreateserial \
-  -extensions v3_req \
-  -extfile /usr/lib/ssl/openssl.cnf \
-  -out ${LOCAL_DEV_CERT}
-echo "#################### LOCAL DEV CERTIFICATE ####################"
-openssl x509 -noout -text -in ${LOCAL_DEV_CERT}
+    -out ${RSA_DEV_CSR}
 
+echo "#################### LOCAL RSA DEV CSR ####################"
+openssl req -noout -text -in ${RSA_DEV_CSR}
+# Add the SAN config to the end of the openssl conf file.
+cp /usr/lib/ssl/openssl.cnf ${RSA_SSL_CONFIG}
+echo -e "\n[alternate_names]" >> ${RSA_SSL_CONFIG}
+echo -e "DNS.1 = ${RSA_DIDN_ID}\n" >> ${RSA_SSL_CONFIG}
+# Accommodate the default behavior of openssl ca.
+openssl ca \
+  -config ${RSA_SSL_CONFIG} \
+  -days 375 \
+  -in ${RSA_DEV_CSR} \
+  -cert ${LOCAL_CA_CERT} \
+  -keyfile ${LOCAL_CA_KEY} \
+  -outdir /tmp/ \
+  -extensions usr_cert \
+  -extfile ${RSA_SSL_CONFIG} \
+  -batch \
+  -out ${RSA_DEV_CERT}
+
+
+##############
+# Create local
+# device ECC p256
+##############
+cd ${LOCAL_CA_DIR}
+openssl ecparam -genkey \
+    -name prime256v1 \
+    -out ${ECC_DEV_KEY} 
+openssl req \
+    -key ${ECC_DEV_KEY} \
+    -new \
+    -sha256 \
+    -subj "/C=US/ST=CA/O=Example Networks/CN=${ECC_DIDN_ID}" \
+    -addext "subjectAltName = DNS:${ECC_DIDN_ID}" \
+    -addext "keyUsage = nonRepudiation, digitalSignature, keyEncipherment" \
+    -out ${ECC_DEV_CSR}
+
+echo "#################### LOCAL ECC DEV CSR ####################"
+openssl req -noout -text -in ${ECC_DEV_CSR}
+# Add the SAN config to the end of the openssl conf file.
+cp /usr/lib/ssl/openssl.cnf ${ECC_SSL_CONFIG}
+echo -e "\n[alternate_names]" >> ${ECC_SSL_CONFIG}
+echo -e "DNS.1 = ${ECC_DIDN_ID}\n" >> ${ECC_SSL_CONFIG}
+# Accommodate the default behavior of openssl ca.
+openssl ca \
+  -config ${ECC_SSL_CONFIG} \
+  -days 375 \
+  -in ${ECC_DEV_CSR} \
+  -cert ${LOCAL_CA_CERT} \
+  -keyfile ${LOCAL_CA_KEY} \
+  -outdir /tmp/ \
+  -extensions usr_cert \
+  -extfile ${ECC_SSL_CONFIG} \
+  -batch \
+  -out ${ECC_DEV_CERT}
+
+# cat ${RSA_SSL_CONFIG}
 ##############
 # Copy files
 # for export
 ##############
-cp ${LOCAL_CA_KEY} ${CRYPTO_EXPORT_PATH}
-cp ${LOCAL_CA_CERT} ${CRYPTO_EXPORT_PATH}
-cp ${LOCAL_DEV_KEY} ${CRYPTO_EXPORT_PATH}
-cp ${LOCAL_DEV_CSR} ${CRYPTO_EXPORT_PATH}
-cp ${LOCAL_DEV_CERT} ${CRYPTO_EXPORT_PATH}
+cp -t ${CRYPTO_EXPORT_PATH} \
+    ${LOCAL_CA_KEY} \
+    ${LOCAL_CA_CERT} \
+    ${RSA_DEV_KEY} \
+    ${RSA_DEV_CSR} \
+    ${RSA_DEV_CERT} \
+    ${ECC_DEV_KEY} \
+    ${ECC_DEV_CSR} \
+    ${ECC_DEV_CERT}
 
 ##############
 # Print results
@@ -132,3 +186,15 @@ cp ${LOCAL_DEV_CERT} ${CRYPTO_EXPORT_PATH}
 echo "######## RESULTING FILES ##########"
 ls -lah ${CRYPTO_EXPORT_PATH}
 echo "Crypto builder phase complete!"
+
+echo "####### CERTIFICATE METADATA #######"
+echo "## CA certificate:"
+openssl x509 -text -noout -in ${LOCAL_CA_CERT}
+echo "## Entity certificates:"
+echo "#################### LOCAL RSA DEV CERTIFICATE ####################"
+openssl x509 -noout -text -in ${RSA_DEV_CERT}
+
+echo "#################### LOCAL RSA DEV CERTIFICATE ####################"
+openssl x509 -noout -text -in ${ECC_DEV_CERT}
+
+echo "### END CRYPTO GENERATION PROCESS ###"
