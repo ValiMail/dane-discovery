@@ -44,8 +44,8 @@ class Identity:
         self.dnsname = dnsname
         self.private_key = self.load_private_key(private_key)
         self.resolver_override = resolver_override
-        self.public_credentials = []
-        self.set_public_credentials(self.dnsname, self.resolver_override)
+        self.dane_credentials = []
+        self.set_dane_credentials(self.dnsname, self.resolver_override)
 
     def get_first_entity_certificate_by_type(self, cert_type, strict=False):
         """Return the first certificate of ``cert_type` for the identity.
@@ -79,7 +79,7 @@ class Identity:
             raise ValueError("Unsupported cert type {}".format(cert_type))
         type_id = supported_certificate_types[cert_type]
         # Find a matching credential
-        for cred in self.public_credentials:
+        for cred in self.dane_credentials:
             if not cred["tlsa_parsed"]["matching_type"] == 0:
                 continue
             target = cred if cred["tlsa_parsed"]["certificate_usage"] == type_id else ""
@@ -105,17 +105,17 @@ class Identity:
         fmt += ("Request context:\n DNSSEC: {}\n TLS: {}\n "
                 "TCP: {}\n".format(self.dnssec, self.tls, self.tcp))
         cred_index = 0
-        for cert in self.public_credentials:
+        fmt += ("Public credentials: {}\n".format(len(self.dane_credentials)))
+        for cert in self.dane_credentials:
             validation_err = ""
-            cert["dnssec"] = self.dnssec
+            cert["tlsa_parsed"]["dnssec"] = self.dnssec
             try:
-                DANE.authenticate_tlsa(self.dnsname, cert)
+                DANE.authenticate_tlsa(self.dnsname, cert["tlsa_parsed"])
             except ValueError as err:
-                validation_err = ["    {}".format(x) for x in str(err).splitlines()]
-                validation_err = "\n".join(validation_err)
+                validation_err = "\n        ".join(["    {}".format(x) for x in str(err).splitlines()])
             validation_status = ("\n    Cryptographically validated." 
                                  if not validation_err 
-                                 else "\n{}".format(validation_err))
+                                 else "\n  Not validated:\n{}".format(validation_err))
             fmt += ("Credential index: {}\n"
                     "validation status: {} \n"
                     " certificate usage: {}\n"
@@ -220,7 +220,7 @@ class Identity:
             retval["public_key_object"] = x509_obj.public_key()
         return retval
 
-    def set_public_credentials(self, dnsname, resolver_override):
+    def set_dane_credentials(self, dnsname, resolver_override):
         """Get public credentials from DNS and set DNS retrieval context.
 
         Args:

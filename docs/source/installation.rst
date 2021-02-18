@@ -13,8 +13,8 @@ and `dnspython <https://pypi.org/project/dnspython/>`_ modules will be
 installed as dependencies, when installing this module with pip.
 
 
-Installation
-------------
+Install
+-------
 
 This module and dependencies may be installed by navigating to the root of the
 repository and running ``pip install``.
