@@ -42,6 +42,7 @@ class Identity:
             TLSAError if identity does not exist in DNS.
         """
         self.dnsname = dnsname
+        self.dnssec = False
         self.private_key = self.load_private_key(private_key)
         self.resolver_override = resolver_override
         self.dane_credentials = []
