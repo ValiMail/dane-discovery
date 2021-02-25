@@ -101,7 +101,7 @@ class TestIntegrationIdentity:
         """Test validating a local certificate when certificate_usage is 4."""
         identity_name = ecc_identity_name
         certificate_path = self.get_path_for_dyn_asset("{}.cert.pem".format(identity_name))
-        certificate = self.get_dyn_asset("{}.cert.pem".format(identity_name))
+        certificate = self.get_dyn_asset(certificate_path)
         identity = Identity(identity_name)
         tlsa_dict = DANE.process_response(self.tlsa_for_cert(identity_name, 4, 0, 0))
         identity.dane_credentials = [identity.process_tlsa(record) for record
@@ -112,13 +112,13 @@ class TestIntegrationIdentity:
         ca_certificate = self.get_dyn_asset(ca_certificate_name)
         requests_mock.get("https://authority.device.example.net/ca/{}.pem".format(aki), 
                           content=ca_certificate)
-        assert Identity.validate_certificate(certificate_path)
+        assert identity.validate_certificate(certificate)
     
     def test_integration_identity_validate_certificate_pkix_cd_dnssec_pass(self, requests_mock):
         """Test validating a local certificate when certificate_usage is 4 and DNSSEC is present."""
         identity_name = ecc_identity_name
         certificate_path = self.get_path_for_dyn_asset("{}.cert.pem".format(identity_name))
-        certificate = self.get_dyn_asset("{}.cert.pem".format(identity_name))
+        certificate = self.get_dyn_asset(certificate_path)
         identity = Identity(identity_name)
         tlsa_dict = DANE.process_response(self.tlsa_for_cert(identity_name, 4, 0, 0))
         identity.dane_credentials = [identity.process_tlsa(record) for record
@@ -130,7 +130,7 @@ class TestIntegrationIdentity:
         ca_certificate = self.get_dyn_asset(ca_certificate_name)
         requests_mock.get("https://authority.device.example.net/ca/{}.pem".format(aki), 
                           content=ca_certificate)
-        assert Identity.validate_certificate(certificate_path)
+        assert identity.validate_certificate(certificate)
 
     def test_integration_identity_validate_certificate_pkix_cd_fail(self, requests_mock):
         """Test validating a local certificate when certificate_usage is 4.
@@ -138,7 +138,7 @@ class TestIntegrationIdentity:
         """
         identity_name = ecc_identity_name
         certificate_path = self.get_path_for_dyn_asset("{}.cert.pem".format(identity_name))
-        certificate = self.get_dyn_asset("{}.cert.pem".format(identity_name))
+        certificate = self.get_dyn_asset(certificate_path)
         identity = Identity(identity_name)
         tlsa_dict = DANE.process_response(self.tlsa_for_cert(identity_name, 4, 0, 0))
         identity.dane_credentials = [identity.process_tlsa(record) for record
@@ -149,7 +149,7 @@ class TestIntegrationIdentity:
         ca_certificate = self.get_dyn_asset(ca_certificate_name)
         requests_mock.get("https://authority.device.example.net/ca/{}.pem".format(aki), 
                           content=ca_certificate)
-        assert Identity.validate_certificate(certificate_path)
+        assert identity.validate_certificate(certificate)
     
     def test_integration_identity_validate_certificate_pkix_cd_dnssec_fail(self, requests_mock):
         """Test validating a local certificate when certificate_usage is 4 and DNSSEC is present.
@@ -157,7 +157,7 @@ class TestIntegrationIdentity:
         """
         identity_name = ecc_identity_name
         certificate_path = self.get_path_for_dyn_asset("{}.cert.pem".format(identity_name))
-        certificate = self.get_dyn_asset("{}.cert.pem".format(identity_name))
+        certificate = self.get_dyn_asset(certificate_path)
         identity = Identity(identity_name)
         tlsa_dict = DANE.process_response(self.tlsa_for_cert(identity_name, 4, 0, 0))
         identity.dane_credentials = [identity.process_tlsa(record) for record
@@ -169,5 +169,5 @@ class TestIntegrationIdentity:
         ca_certificate = self.get_dyn_asset(ca_certificate_name)
         requests_mock.get("https://authority.device.example.net/ca/{}.pem".format(aki), 
                           content=ca_certificate)
-        assert Identity.validate_certificate(certificate_path)
+        assert identity.validate_certificate(certificate)
 
