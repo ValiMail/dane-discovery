@@ -7,7 +7,7 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.exceptions import InvalidSignature
-import requests
+# import requests
 
 from .dane import DANE
 from .exceptions import TLSAError
@@ -42,10 +42,85 @@ class Identity:
             TLSAError if identity does not exist in DNS.
         """
         self.dnsname = dnsname
+        self.dnssec = False
+        self.tls = False
+        self.tcp = False
         self.private_key = self.load_private_key(private_key)
         self.resolver_override = resolver_override
         self.dane_credentials = []
         self.set_dane_credentials(self.dnsname, self.resolver_override)
+
+    def validate_certificate(self, certificate):
+        """Validate certificate against DANE identity records in DNS.
+        
+        This method returns two valufes, success and status.
+
+        This method only checks against TLSA records with
+        certificate_usage 4.
+        
+        Args:
+            certificate (str): Certificate in PEM or DER format.
+        
+        Returns:
+            bool: True if successful, False if validation fails.
+            str: Status indicating why validation passed or failed.
+        """
+        cert_obj = DANE.build_x509_object(certificate)
+        why_not = []
+        default = "Unable to find a TLSA record with certificate usage 4."
+        # For each TLSA certificate, attempt to validate local cert.
+        for credential in self.dane_credentials:
+            valid = False
+            cert_usage = credential["certificate_usage"]
+            if cert_usage == 4:
+                valid, reason = self.validate_pkix_cd(cert_obj, credential)
+                if valid:
+                    return True, reason
+                else:
+                    why_not.append(reason)
+        if not why_not:
+            why_not.append(default)
+        return False, "\n".join(why_not)
+
+    def validate_pkix_cd(self, cert_obj, credential):
+        """Validate a certificate with certificate_usage 4.
+        
+        PKIX-CD expects selector 0 and matching type 0. This
+        method will not validate configuration which differs 
+        from this expectation.
+
+        Args:
+            cert_obj (cryptography.x509): Certificate object.
+            credential (dict): Parsed credential from DNS.
+
+        Returns:
+            bool: True or False for validation
+            string: Reason for validation pass/fail.
+        """
+        why_not = []
+        # Check TLSA records for wrong selector and matching type.
+        selector = credential["selector"]
+        matching_type = credential["matching_type"]
+        if selector != 0:
+            why_not.append("Selector set to {}.".format(selector))
+        if matching_type != 0:
+            why_not.append("Matching type set to {}.".format(matching_type))
+        if why_not:
+            return False, "\n".join(why_not)
+        # Check to see that the DER matches what's in DNS
+        cert_der = cert_obj.public_bytes(encoding=serialization.Encoding.DER)
+        tlsa_der = credential["tlsa_fields"]["certificate_association"]
+        if not cert_der == tlsa_der:
+            return False, "Certificate and TLSA certificate association do nt match."
+        # Get the CA certificate
+        try:
+            ca_pem = DANE.get_ca_certificate_for_identity(self.dnsname, cert_der)
+        except ValueError as err:
+            return False, str(err)
+        ca_validation = DANE.verify_certificate_signature(cert_der, ca_pem)
+        if not ca_validation:
+            return False, "Validation against CA certificate failed."
+        return True, "Format and authority CA signature verified."
 
     def get_first_entity_certificate_by_type(self, cert_type, strict=False):
         """Return the first certificate of ``cert_type` for the identity.

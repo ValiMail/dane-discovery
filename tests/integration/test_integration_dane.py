@@ -340,7 +340,7 @@ class TestIntegrationDane:
         for id_name in identity_names:
             id_cert = self.get_dyn_asset("{}.cert.pem".format(id_name))
             aki = DANE.get_authority_key_id_from_certificate(id_cert)
-            ca_certificate = self.get_dyn_asset("{}.cert.pem".format(id_name))
+            ca_certificate = self.get_dyn_asset(ca_certificate_name)
             requests_mock.get("https://authority.device.example.net/ca/{}.pem".format(aki), 
                               content=ca_certificate)
             retrieved = DANE.get_ca_certificate_for_identity(id_name, id_cert)
