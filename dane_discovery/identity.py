@@ -56,7 +56,7 @@ class Identity:
         This method returns two valufes, success and status.
 
         This method only checks against TLSA records with
-        certificate_usage 4.
+        certificate_usage 4, or PKIX-CD.
         
         Args:
             certificate (str): Certificate in PEM or DER format.
@@ -72,7 +72,7 @@ class Identity:
         for credential in self.dane_credentials:
             valid = False
             cert_usage = credential["certificate_usage"]
-            if cert_usage == 4:
+            if cert_usage == "PKIX-CD":
                 valid, reason = self.validate_pkix_cd(cert_obj, credential)
                 if valid:
                     return True, reason
@@ -99,8 +99,8 @@ class Identity:
         """
         why_not = []
         # Check TLSA records for wrong selector and matching type.
-        selector = credential["selector"]
-        matching_type = credential["matching_type"]
+        selector = credential["tlsa_parsed"]["selector"]
+        matching_type = credential["tlsa_parsed"]["matching_type"]
         if selector != 0:
             why_not.append("Selector set to {}.".format(selector))
         if matching_type != 0:
@@ -109,7 +109,8 @@ class Identity:
             return False, "\n".join(why_not)
         # Check to see that the DER matches what's in DNS
         cert_der = cert_obj.public_bytes(encoding=serialization.Encoding.DER)
-        tlsa_der = credential["tlsa_fields"]["certificate_association"]
+        cert_association = credential["tlsa_parsed"]["certificate_association"]
+        tlsa_der = DANE.certificate_association_to_der(cert_association)
         if not cert_der == tlsa_der:
             return False, "Certificate and TLSA certificate association do nt match."
         # Get the CA certificate

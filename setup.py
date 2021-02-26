@@ -37,6 +37,11 @@ setup(name=PROJECT_NAME,
       url="https://github.com/valimail/{}".format(PROJECT_NAME),
       packages=[PROJECT_NAME],
       long_description=build_long_desc(),
+      entry_points={
+          "console_scripts": [
+              "authenticate_pkix_cd = dane_discovery.scripts.authenticate_pkix_cd:main"
+          ]
+      },
       install_requires=["dnspython==2.0.0", "cryptography~=3.0", "requests~=2.24.0"],
       classifiers=[
         "Development Status :: 4 - Beta",
