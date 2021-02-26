@@ -337,12 +337,12 @@ class DANE:
         certificate_der = cls.certificate_association_to_der(certificate_association)
         id_cert = cls.der_to_pem(certificate_der)
         try:
-            print("Load CA cert")
+            # print("Load CA cert")
             ca_cert = cls.get_ca_certificate_for_identity(dns_name, id_cert)
-            print("Test cert sig.")
+            # print("Test cert sig.")
             if not cls.verify_certificate_signature(id_cert, ca_cert):
                 errmsg += "PKIX signature validation for identity failed.\n"
-            print("verify DNS name")
+            # print("verify DNS name")
             if not cls.verify_dnsname(dns_name, certificate_der):
                 errmsg += "DNS name match against SAN failed.\n"
         except TLSAError as err:
@@ -355,13 +355,24 @@ class DANE:
     def verify_dnsname(cls, dns_name, certificate_der):
         """Return True if the first dNSName in the SAN matches."""
         x5_obj = cls.build_x509_object(certificate_der)
-        san = x5_obj.extensions.get_extension_for_class(x509.SubjectAlternativeName)
-        san_dns_names = san.value.get_values_for_type(x509.DNSName)
+        san_dns_names = cls.get_dnsnames_from_cert(x5_obj)
         if san_dns_names[0] != dns_name:
             return False
         return True
+
+    @classmethod
+    def get_dnsnames_from_cert(cls, x5_obj):
+        """Return the dnsnames from the certificate's SAN.
+
+        Args:
+            x5_obj (cryptography.x509): Certificate object.
         
-    
+        Return: 
+            list: str: dNSNames from certificate SAN.
+        """
+        san = x5_obj.extensions.get_extension_for_class(x509.SubjectAlternativeName)
+        return san.value.get_values_for_type(x509.DNSName)
+
     @classmethod
     def verify_certificate_signature(cls, entity_certificate, ca_certificate):
         """ Return True if entity_certificate was signed by ca_certificate.
