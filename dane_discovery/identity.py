@@ -298,6 +298,27 @@ class Identity:
             retval["public_key_object"] = retval["certificate_object"].public_key()
         return retval
 
+    def get_all_pkix_cd_certificates(self):
+        """Return a dictionary of all PKIX-CD certificates for this identity.
+
+        Return: 
+            dict: Dictionary key is ``${DNSNAME}-${CERTHASH}``, and the value is the
+                the PEM-encoded certificate.
+        """
+        retval = {}
+        for cred in self.dane_credentials:
+            tlsa = cred["tlsa_parsed"]
+            if (tlsa["certificate_usage"] == 4 
+                    and tlsa["selector"] == 0
+                    and tlsa["matching_type"] == 0):
+                id_name = self.dnsname 
+                cert_obj = cred["certificate_object"]
+                cert_pem = cert_obj.public_bytes(serialization.Encoding.PEM)
+                cert_hash = DANE.generate_sha_by_selector(cert_pem, "sha256", 0)
+                retval["{}-{}".format(id_name, cert_hash)] = cert_pem
+        return retval
+
+
     def set_dane_credentials(self, dnsname, resolver_override):
         """Get public credentials from DNS and set DNS retrieval context.
 

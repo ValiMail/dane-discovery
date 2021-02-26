@@ -171,3 +171,20 @@ class TestIntegrationIdentity:
                           content=ca_certificate)
         assert identity.validate_certificate(certificate)
 
+    def test_integration_identity_get_all_pkixcd_for_identity(self, requests_mock):
+        """Test retrieval of all PKIX-CD certs for an identity."""
+        identity_name1 = ecc_identity_name
+        identity_name2 = rsa_identity_name
+        identity = Identity(identity_name1)
+        tlsa_dict1 = DANE.process_response(self.tlsa_for_cert(identity_name1, 4, 0, 0))
+        tlsa_dict2 = DANE.process_response(self.tlsa_for_cert(identity_name2, 4, 0, 0))
+        identity.dane_credentials = [identity.process_tlsa(record) for record
+                                     in [tlsa_dict1, tlsa_dict2]]
+        identity.tls = True
+        identity.tcp = True
+        identity.dnssec = True
+        certs = identity.get_all_pkix_cd_certificates()
+        assert len(certs) == 2
+        cert_list = [y for x, y in certs.items()]
+        assert cert_list[0] != cert_list[1]
+
