@@ -2,8 +2,27 @@ Changelog
 =========
 
 
-v0.7
+v0.8
 ----
+
+New
+~~~
+- Add dane_pkix_cd_get_ca_certificates. [Ash Wilson]
+
+  Close #32
+- Add dane_pkix_cd_get_certificates. [Ash Wilson]
+
+  Close #31
+- Add authenticate_pkix_cd script. [Ash Wilson]
+
+  Close #29
+- Add PKIX-CD validation for local certificates. [Ash Wilson]
+
+  Close #28
+
+
+v0.7 (2021-02-18)
+-----------------
 
 New
 ~~~
