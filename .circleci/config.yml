@@ -35,24 +35,27 @@ jobs:
             sudo cp ${HOME}/export/* tests/fixtures/dynamic/
             sudo chown -R `whoami` ${HOME}
       - run:
+          name: Install deps and package
+          command: |
+            pip3 install -r requirements-develop.txt
+            pip3 install -r requirements-test.txt
+            pip3 install -r requirements-doc.txt
+            pip3 install .
+      - run:
+          name: Test building docs
+          command: |
+            cd docs
+            make html
+      - run:
           name: Install deps and run unit and integration tests
           command: |
             curl -L https://codeclimate.com/downloads/test-reporter/test-reporter-latest-linux-amd64 > ./cc-test-reporter
             chmod +x ./cc-test-reporter
-            pip3 install -r requirements-develop.txt
-            pip3 install -r requirements-test.txt
-            pip3 install .
             ./cc-test-reporter before-build
             python3 -m py.test --cov=dane_discovery --cov-report=xml --cov-report=term-missing
             ./cc-test-reporter format-coverage -t coverage.py ./coverage.xml
             ./cc-test-reporter upload-coverage
             ./cc-test-reporter after-build --exit-code $?
-      - run:
-          name: Test building docs
-          command: |
-            pip3 install -r requirements-doc.txt
-            cd docs
-            make html
       - run:
           name: Trigger build in RTD
           command: |
