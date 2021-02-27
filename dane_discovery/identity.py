@@ -7,7 +7,7 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.exceptions import InvalidSignature
-import requests
+# import requests
 
 from .dane import DANE
 from .exceptions import TLSAError
@@ -42,13 +42,89 @@ class Identity:
             TLSAError if identity does not exist in DNS.
         """
         self.dnsname = dnsname
+        self.dnssec = False
+        self.tls = False
+        self.tcp = False
         self.private_key = self.load_private_key(private_key)
         self.resolver_override = resolver_override
         self.dane_credentials = []
         self.set_dane_credentials(self.dnsname, self.resolver_override)
 
+    def validate_certificate(self, certificate):
+        """Validate certificate against DANE identity records in DNS.
+        
+        This method returns two valufes, success and status.
+
+        This method only checks against TLSA records with
+        certificate_usage 4, or PKIX-CD.
+        
+        Args:
+            certificate (str): Certificate in PEM or DER format.
+        
+        Returns:
+            bool: True if successful, False if validation fails.
+            str: Status indicating why validation passed or failed.
+        """
+        cert_obj = DANE.build_x509_object(certificate)
+        why_not = []
+        default = "Unable to find a TLSA record with certificate usage 4."
+        # For each TLSA certificate, attempt to validate local cert.
+        for credential in self.dane_credentials:
+            valid = False
+            cert_usage = credential["certificate_usage"]
+            if cert_usage == "PKIX-CD":
+                valid, reason = self.validate_pkix_cd(cert_obj, credential)
+                if valid:
+                    return True, reason
+                else:
+                    why_not.append(reason)
+        if not why_not:
+            why_not.append(default)
+        return False, "\n".join(why_not)
+
+    def validate_pkix_cd(self, cert_obj, credential):
+        """Validate a certificate with certificate_usage 4.
+        
+        PKIX-CD expects selector 0 and matching type 0. This
+        method will not validate configuration which differs 
+        from this expectation.
+
+        Args:
+            cert_obj (cryptography.x509): Certificate object.
+            credential (dict): Parsed credential from DNS.
+
+        Returns:
+            bool: True or False for validation
+            string: Reason for validation pass/fail.
+        """
+        why_not = []
+        # Check TLSA records for wrong selector and matching type.
+        selector = credential["tlsa_parsed"]["selector"]
+        matching_type = credential["tlsa_parsed"]["matching_type"]
+        if selector != 0:
+            why_not.append("Selector set to {}.".format(selector))
+        if matching_type != 0:
+            why_not.append("Matching type set to {}.".format(matching_type))
+        if why_not:
+            return False, "\n".join(why_not)
+        # Check to see that the DER matches what's in DNS
+        cert_der = cert_obj.public_bytes(encoding=serialization.Encoding.DER)
+        cert_association = credential["tlsa_parsed"]["certificate_association"]
+        tlsa_der = DANE.certificate_association_to_der(cert_association)
+        if not cert_der == tlsa_der:
+            return False, "Certificate and TLSA certificate association do nt match."
+        # Get the CA certificate
+        try:
+            ca_pem = DANE.get_ca_certificate_for_identity(self.dnsname, cert_der)
+        except ValueError as err:
+            return False, str(err)
+        ca_validation = DANE.verify_certificate_signature(cert_der, ca_pem)
+        if not ca_validation:
+            return False, "Validation against CA certificate failed."
+        return True, "Format and authority CA signature verified."
+
     def get_first_entity_certificate_by_type(self, cert_type, strict=False):
-        """Return the first certificate of ``cert_type` for the identity.
+        """Return the first certificate of ``cert_type`` for the identity.
         
         Supported certificate types:
             PKIX-EE: Corresponds with ``certificate_usage`` ``1``.
@@ -195,17 +271,25 @@ class Identity:
             tlsa_record (dict): Dictionary describing TLSA record contents.
 
         Dictionary keys:
+
             ``tlsa_fields``: TLSA record parsed into a list.
+        
             ``tlsa_parsed``: A dictionary of parsed TLSA record fields.
+        
             ``certificate_usage``: Text description of the TLSA field.
+        
             ``matching_type``: Text description of the TLSA field.
+        
             ``selector``: Text description of the TLSA field.
+        
             ``certificate_metadata``: Metadata parsed from the certificate.
+        
             ``public_key_object``: If the TLSA record contains a public key,
-                this will be the same object as generated by
-                cryptography.hazmat.primitives.serialization.load_der_public_key()
+            this will be the same object as generated by
+            cryptography.hazmat.primitives.serialization.load_der_public_key()
+        
             ``certificate_object``: If the TLSA record conatins a certificate,
-                this will be a cryptography.x509.Certificate object.
+            this will be a cryptography.x509.Certificate object.
         """
         tlsa_fields = ["certificate_usage", "selector",
                        "matching_type", "certificate_association"]
@@ -221,6 +305,27 @@ class Identity:
             retval["certificate_object"] = DANE.build_x509_object(cert_der)
             retval["public_key_object"] = retval["certificate_object"].public_key()
         return retval
+
+    def get_all_pkix_cd_certificates(self):
+        """Return a dictionary of all PKIX-CD certificates for this identity.
+
+        Return: 
+            dict: Dictionary key is ``${DNSNAME}-${CERTHASH}``, and the value is the
+                the PEM-encoded certificate.
+        """
+        retval = {}
+        for cred in self.dane_credentials:
+            tlsa = cred["tlsa_parsed"]
+            if (tlsa["certificate_usage"] == 4 
+                    and tlsa["selector"] == 0
+                    and tlsa["matching_type"] == 0):
+                id_name = self.dnsname 
+                cert_obj = cred["certificate_object"]
+                cert_pem = cert_obj.public_bytes(serialization.Encoding.PEM)
+                cert_hash = DANE.generate_sha_by_selector(cert_pem, "sha256", 0)
+                retval["{}-{}".format(id_name, cert_hash)] = cert_pem
+        return retval
+
 
     def set_dane_credentials(self, dnsname, resolver_override):
         """Get public credentials from DNS and set DNS retrieval context.
