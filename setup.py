@@ -40,7 +40,7 @@ setup(name=PROJECT_NAME,
       entry_points={
           "console_scripts": [
               "dane_pkix_cd_get_certificates = dane_discovery.scripts.dane_pkix_cd_get_certificates:main",
-              "dane_pkix_cd_validate_certificate = dane_discovery.scripts.dane_pkix_cd_validate_certificate:main"
+              "dane_pkix_cd_authenticate_certificate = dane_discovery.scripts.dane_pkix_cd_authenticate_certificate:main"
           ]
       },
       install_requires=["dnspython==2.0.0", "cryptography~=3.0", "requests~=2.24.0"],

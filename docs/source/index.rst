@@ -10,6 +10,7 @@ Contents:
    :maxdepth: 2
 
    installation
+   tools
    getting_started
    object_dane
    object_identity

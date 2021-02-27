@@ -7,15 +7,16 @@ from dane_discovery.dane import DANE
 from dane_discovery.identity import Identity
 
 
+parser = argparse.ArgumentParser("Authenticate a local certificate using PKIX-CD")
+parser.add_argument("--certificate_path", dest="cert_path", required=True, help="Path to certificate")
+parser.add_argument("--identity_name", dest="dnsname", required=False, help="Identity DNS name")
+parser.add_argument("--silent", dest="silent", action="store_true", help="No output, only exit code")
+parser.set_defaults(silent=False, dnsname=None)
+
 
 def main():
     """Wrap functionality provided by Identity.validate_certificate()"""
     # Parse args
-    parser = argparse.ArgumentParser("Authenticate a local certificate using PKIX-CD")
-    parser.add_argument("--certificate_path", dest="cert_path", required=True, help="Path to certificate")
-    parser.add_argument("--identity_name", dest="dnsname", required=False, help="Identity DNS name")
-    parser.add_argument("--silent", dest="silent", action="store_true", help="No output, only exit code")
-    parser.set_defaults(silent=False, dnsname=None)
     args = parser.parse_args()
     # Load cert from file
     try:
@@ -43,6 +44,7 @@ def get_file_contents(file_path):
     with open(file_path) as f_obj:
         return f_obj.read()
 
+
 def exit_handler(success, msg, silent):
     """Handle exiting gracefully."""
     if not silent:
@@ -50,6 +52,7 @@ def exit_handler(success, msg, silent):
     if success:
         sys.exit(0)
     exit(1)
+
 
 if __name__ == "__main__":
     main()
