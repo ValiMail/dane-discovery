@@ -29,6 +29,8 @@ jobs:
           command: |
             ls -l
             export ORIGIN=${PWD}
+            cp tests/scripts/generate_crypto.sh ./
+            cp tests/configs/ssl.cnf ./
             bash ./generate_crypto.sh
             cd ${ORIGIN}
             mkdir -p tests/fixtures/dynamic

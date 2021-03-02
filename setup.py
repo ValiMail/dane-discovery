@@ -39,9 +39,9 @@ setup(name=PROJECT_NAME,
       long_description=build_long_desc(),
       entry_points={
           "console_scripts": [
-              "dane_pkix_cd_get_certificates = dane_discovery.scripts.dane_pkix_cd_get_certificates:main",
-              "dane_pkix_cd_authenticate_certificate = dane_discovery.scripts.dane_pkix_cd_authenticate_certificate:main",
-              "dane_pkix_cd_get_ca_certificates = dane_discovery.scripts.dane_pkix_cd_get_ca_certificates:main"
+              "dane_discovery_get_certificates = dane_discovery.scripts.dane_discovery_get_certificates:main",
+              "dane_discovery_authenticate_certificate = dane_discovery.scripts.dane_discovery_authenticate_certificate:main",
+              "dane_discovery_get_ca_certificates = dane_discovery.scripts.dane_discovery_get_ca_certificates:main"
           ]
       },
       install_requires=["dnspython==2.0.0", "cryptography~=3.0", "requests~=2.24.0"],
