@@ -2,8 +2,21 @@ Changelog
 =========
 
 
-v0.8
+v0.9
 ----
+
+Changes
+~~~~~~~
+- Add filtering to certificate retrieval tool. [Ash Wilson]
+
+  Close #39
+- Rename CLI sc8ripts to align with package name. [Ash Wilson]
+
+  Close #38
+
+
+v0.8 (2021-02-27)
+-----------------
 
 New
 ~~~
