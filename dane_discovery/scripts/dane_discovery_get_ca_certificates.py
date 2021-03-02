@@ -8,7 +8,7 @@ from dane_discovery.identity import Identity
 
 
 
-parser = argparse.ArgumentParser("Retrieve and store all CA certificates required for PKIX-CD authentication of an identity.")
+parser = argparse.ArgumentParser(description="Retrieve and store all CA certificates required for PKIX-CD authentication of an identity.")
 parser.add_argument("--output_path", dest="out_path", required=True, help="Output path for certificate bundle")
 parser.add_argument("--separate_files", dest="separate_files", required=False, 
                     action="store_true", help=("This will use --output_path as"
@@ -18,12 +18,12 @@ parser.add_argument("--identity_name", dest="dnsname", required=True, help="Iden
 parser.set_defaults(separate_files=False)
 
 def main():
-    """Wrap functionality provided by Identity.get_all_pkix_cd_certificates()"""
+    """Wrap functionality provided by Identity.get_all_certificates()"""
     # Parse args
     args = parser.parse_args()
     # Get PKIX-CD certs from DNS
     identity = Identity(args.dnsname)
-    ee_certs = identity.get_all_pkix_cd_certificates()
+    ee_certs = identity.get_all_certificates(filters=["PKIX-CD"])
     # Get the CA certificates for the EE certs
     certs = {}
     for _, ee_cert_pem in ee_certs.items():

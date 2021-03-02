@@ -171,20 +171,55 @@ class TestIntegrationIdentity:
                           content=ca_certificate)
         assert identity.validate_certificate(certificate)
 
-    def test_integration_identity_get_all_pkixcd_for_identity(self, requests_mock):
+    def test_integration_identity_get_all_certs_for_identity(self, requests_mock):
         """Test retrieval of all PKIX-CD certs for an identity."""
         identity_name1 = ecc_identity_name
         identity_name2 = rsa_identity_name
         identity = Identity(identity_name1)
         tlsa_dict1 = DANE.process_response(self.tlsa_for_cert(identity_name1, 4, 0, 0))
         tlsa_dict2 = DANE.process_response(self.tlsa_for_cert(identity_name2, 4, 0, 0))
+        tlsa_dict3 = DANE.process_response(self.tlsa_for_cert(identity_name1, 3, 0, 0))
+        tlsa_dict4 = DANE.process_response(self.tlsa_for_cert(identity_name1, 1, 0, 0))
         identity.dane_credentials = [identity.process_tlsa(record) for record
-                                     in [tlsa_dict1, tlsa_dict2]]
+                                     in [tlsa_dict1, tlsa_dict2, tlsa_dict3, tlsa_dict4]]
         identity.tls = True
         identity.tcp = True
         identity.dnssec = True
-        certs = identity.get_all_pkix_cd_certificates()
+        ca_certificate = self.get_dyn_asset(ca_certificate_name)
+        certificate_path = self.get_path_for_dyn_asset("{}.cert.pem".format(identity_name1))
+        certificate = self.get_dyn_asset(certificate_path)
+        # Both identities have the same CA.
+        aki = DANE.get_authority_key_id_from_certificate(certificate)
+        requests_mock.get("https://authority.device.example.net/ca/{}.pem".format(aki), 
+                          content=ca_certificate)
+        certs = identity.get_all_certificates()
+        # We only have two UNIQUE certs, across four TLSA records.
         assert len(certs) == 2
         cert_list = [y for x, y in certs.items()]
         assert cert_list[0] != cert_list[1]
+
+    def test_integration_identity_get_all_certs_for_identity_filtered(self, requests_mock):
+        """Test retrieval of all PKIX-CD certs for an identity."""
+        identity_name1 = ecc_identity_name
+        identity_name2 = rsa_identity_name
+        identity = Identity(identity_name1)
+        tlsa_dict1 = DANE.process_response(self.tlsa_for_cert(identity_name1, 4, 0, 0))
+        tlsa_dict2 = DANE.process_response(self.tlsa_for_cert(identity_name2, 4, 0, 0))
+        tlsa_dict3 = DANE.process_response(self.tlsa_for_cert(identity_name1, 3, 0, 0))
+        tlsa_dict4 = DANE.process_response(self.tlsa_for_cert(identity_name1, 1, 0, 0))
+        identity.dane_credentials = [identity.process_tlsa(record) for record
+                                     in [tlsa_dict1, tlsa_dict2, tlsa_dict3, tlsa_dict4]]
+        identity.tls = True
+        identity.tcp = True
+        identity.dnssec = True
+        ca_certificate = self.get_dyn_asset(ca_certificate_name)
+        certificate_path = self.get_path_for_dyn_asset("{}.cert.pem".format(identity_name1))
+        certificate = self.get_dyn_asset(certificate_path)
+        # Both identities have the same CA.
+        aki = DANE.get_authority_key_id_from_certificate(certificate)
+        requests_mock.get("https://authority.device.example.net/ca/{}.pem".format(aki), 
+                          content=ca_certificate)
+        certs = identity.get_all_certificates(filters=["PKIX-EE"])
+        # We only have one PKIX-EE cert.
+        assert len(certs) == 1
 

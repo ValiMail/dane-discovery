@@ -306,23 +306,63 @@ class Identity:
             retval["public_key_object"] = retval["certificate_object"].public_key()
         return retval
 
-    def get_all_pkix_cd_certificates(self):
+    def get_all_certificates(self, filters=[]):
         """Return a dictionary of all PKIX-CD certificates for this identity.
+
+        This method uses available methods for validating certificates retrieved
+        from TLSA records associated with the identity's DNS name. 
+        
+        For DANE-EE, we really just care that it parses and it was delivered with 
+        DNSSEC. 
+        
+        For PKIX-EE, we require delivery to be protected by DNSSEC. In the future,
+        when the Python cryptography library supports full PKIX validation, we will
+        also include PKIX validation. https://github.com/pyca/cryptography/issues/2381
+
+        For PKIX-CD, we require that the trust chain be represented out-of-band in 
+        accordance with the proposed standard for certificate and trust chain discovery.
+
+        Keyword args:
+            filters (list): List of filters for specific DANE certificate usages.
+                Valid filters are: "DANE-EE", "PKIX-EE", "PKIX-CD".
 
         Return: 
             dict: Dictionary key is ``${DNSNAME}-${CERTHASH}``, and the value is the
                 the PEM-encoded certificate.
         """
         retval = {}
+        # Bail if a bad filter is used.
+        if filters:
+            for filter_val in filters:
+                if filter_val not in ["DANE-EE", "PKIX-EE", "PKIX-CD"]:
+                    raise ValueError("Invalid filter: {}".format(filter_val))
+        else:
+            filters = ["DANE-EE", "PKIX-EE", "PKIX-CD"]
+        # Iterate and authenticate
         for cred in self.dane_credentials:
             tlsa = cred["tlsa_parsed"]
-            if (tlsa["certificate_usage"] == 4 
-                    and tlsa["selector"] == 0
-                    and tlsa["matching_type"] == 0):
-                id_name = self.dnsname 
-                cert_obj = cred["certificate_object"]
-                cert_pem = cert_obj.public_bytes(serialization.Encoding.PEM)
-                cert_hash = DANE.generate_sha_by_selector(cert_pem, "sha256", 0)
+            # If it's not a full cert, skip
+            if not tlsa["matching_type"] == 0:
+                continue
+            id_name = self.dnsname 
+            cert_obj = cred["certificate_object"]
+            cert_pem = cert_obj.public_bytes(serialization.Encoding.PEM)
+            cert_hash = DANE.generate_sha_by_selector(cert_pem, "sha256", 0)
+            # Validate for PKIX-CD
+            if (tlsa["certificate_usage"] == 4 and "PKIX-CD" in filters):
+                valid, _ = self.validate_pkix_cd(cert_obj, cred)
+                if not valid:
+                    continue
+                retval["{}-{}".format(id_name, cert_hash)] = cert_pem
+            # Validate for DANE-EE (delivered via DNSSEC?)
+            if (tlsa["certificate_usage"] == 3 and "DANE-EE" in filters):
+                if not self.dnssec:
+                    continue
+                retval["{}-{}".format(id_name, cert_hash)] = cert_pem
+            # Validate for PKIX-EE (delivered via DNSSEC?)
+            if (tlsa["certificate_usage"] == 1 and "PKIX-EE" in filters):
+                if not self.dnssec:
+                    continue
                 retval["{}-{}".format(id_name, cert_hash)] = cert_pem
         return retval
 
