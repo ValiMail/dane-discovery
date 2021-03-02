@@ -7,7 +7,7 @@ from dane_discovery.dane import DANE
 from dane_discovery.identity import Identity
 
 
-parser = argparse.ArgumentParser("Authenticate a local certificate using PKIX-CD")
+parser = argparse.ArgumentParser(description="Authenticate a local certificate using PKIX-CD")
 parser.add_argument("--certificate_path", dest="cert_path", required=True, help="Path to certificate")
 parser.add_argument("--identity_name", dest="dnsname", required=False, help="Identity DNS name")
 parser.add_argument("--silent", dest="silent", action="store_true", help="No output, only exit code")

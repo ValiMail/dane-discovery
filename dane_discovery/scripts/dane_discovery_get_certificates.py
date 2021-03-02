@@ -8,21 +8,34 @@ from dane_discovery.identity import Identity
 
 
 
-parser = argparse.ArgumentParser("Retrieve and store all PKIX-CD certificates for an identity.")
+parser = argparse.ArgumentParser(description=("Retrieve, authenticate, and store all certificates for a DANE identity.\n"
+                                 "Default behavior retrieves and authenticates all available entity certificates."
+                                 "Adding filters for specific types (--pkix-cd, for instance) limits output to those types."))
 parser.add_argument("--output_path", dest="out_path", required=True, help="Output path for certificate bundle")
 parser.add_argument("--separate_files", dest="separate_files", required=False, 
                     action="store_true", help=("This will use --output_path as"
                         "a directory for writing individual certificate files."))
 parser.add_argument("--identity_name", dest="dnsname", required=True, help="Identity DNS name")
-parser.set_defaults(separate_files=False)
+# Filters by type
+parser.add_argument("--dane_ee", dest="filter_dane_ee", required=False, action="store_true", help="Include DANE-EE.")
+parser.add_argument("--pkix_ee", dest="filter_pkix_ee", required=False, action="store_true", help="Include PKIX-EE.")
+parser.add_argument("--pkix_cd", dest="filter_pkix_cd", required=False, action="store_true", help="Include PKIX-CD.")
+parser.set_defaults(separate_files=False, filter_dane_ee=False, filter_pkix_ee=False, filter_pkix_cd=False)
 
 def main():
-    """Wrap functionality provided by Identity.get_all_pkix_cd_certificates()"""
+    """Wrap functionality provided by Identity.get_all_certificates()"""
     # Parse args
     args = parser.parse_args()
+    filters = []
+    if args.filter_dane_ee:
+        filters.append("DANE-EE")
+    if args.filter_pkix_ee:
+        filters.append("PKIX-EE")
+    if args.filter_pkix_cd:
+        filters.append("PKIX-CD")
     # Get PKIX-CD certs from DNS
     identity = Identity(args.dnsname)
-    certs = identity.get_all_pkix_cd_certificates()
+    certs = identity.get_all_certificates(filters=filters)
     # Write out files
     if args.separate_files:
         write_individual_certs(certs, args.out_path)

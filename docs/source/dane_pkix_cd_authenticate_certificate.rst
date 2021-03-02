@@ -5,8 +5,10 @@ Local Certificate Authentication
 
 ::
 
-    dane_pkix_cd_authenticate_certificate  -h                               
-    usage: Authenticate a local certificate using PKIX-CD [-h] --certificate_path CERT_PATH [--identity_name DNSNAME] [--silent]
+    dane_discovery_authenticate_certificate -h
+    usage: dane_discovery_authenticate_certificate [-h] --certificate_path CERT_PATH [--identity_name DNSNAME] [--silent]
+
+    Authenticate a local certificate using PKIX-CD
 
     optional arguments:
       -h, --help            show this help message and exit
@@ -15,4 +17,5 @@ Local Certificate Authentication
       --identity_name DNSNAME
                             Identity DNS name
       --silent              No output, only exit code
+
 
