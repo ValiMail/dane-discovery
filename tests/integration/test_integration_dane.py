@@ -89,54 +89,6 @@ l+a1hqYCoeQ8Wts5m9v1t6T443Qp1hT53Zel5zhRHa3Pxvnh2NsEZ6idGA==
 -----END CERTIFICATE-----""".encode()
 
 
-class FakeRR:
-    """Fake a single TLSA RR."""
-
-    def __init__(self, rr):
-        """Initialize with one RR."""
-        self.rr = rr
-
-    def to_text(self):
-        """Return the RR."""
-        return self.rr
-
-
-class FakeTLSALongAnswer:
-    """Fake response for full answer."""
-
-    def __init__(self):
-        """Instantiate with one full TLSA RR."""
-        self.rrset = [FakeRR(tlsa_record_full)]
-
-    def __iter__(self):
-        """Yield one by one."""
-        for x in self.rrset:
-            yield x
-
-
-class FakeTLSAShortAnswer:
-    """Fake response for SHA answers."""
-
-    def __init__(self):
-        """Instantiate with some SHA TLSA RRs."""
-        self.rrset = [FakeRR(x) for x in tlsa_record_shorts]
-
-    def __iter__(self):
-        """Yield one by one."""
-        for x in self.rrset:
-            yield x
-
-
-class FakeTLSAEmptyAnswer:
-    """Fake response for empty result."""
-
-    def __init__(self):
-        """Instantiate with some SHA TLSA RRs."""
-        self.rrset = []
-
-    def __iter__(self):
-        """Yield one by one."""
-        raise dns.resolver.NXDOMAIN("yolo.")
 
 
 class TestIntegrationDane:
@@ -282,9 +234,12 @@ class TestIntegrationDane:
             full_record = "name.example.com 123 IN TLSA {}".format(generated)
             parsed = DANE.process_response(full_record)
             assert DANE.validate_certificate(parsed["certificate_association"]) is None  # NOQA
-            der_cert = binascii.unhexlify(parsed["certificate_association"])
-            x5_obj = DANE.build_x509_object(der_cert)
+            test_der_cert = binascii.unhexlify(parsed["certificate_association"])
+            control_der_cert = self.get_dyn_asset("{}.cert.der".format(identity_name))
+            x5_obj = DANE.build_x509_object(test_der_cert)
+            assert DANE.build_x509_object(control_der_cert)
             assert isinstance(x5_obj, Certificate)
+            assert test_der_cert == control_der_cert
 
     def test_integration_dane_verify_certificate_signature_success(self):
         """Test CA signature validation success."""
