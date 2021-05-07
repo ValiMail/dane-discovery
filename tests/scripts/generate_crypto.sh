@@ -36,11 +36,13 @@ LOCAL_CA_CERT="${LOCAL_CA_DIR}/ca.example.net.cert.pem"
 RSA_DEV_KEY="${DEV_DIR}/${RSA_DIDN_ID}.key.pem"
 RSA_DEV_CSR="${DEV_DIR}/${RSA_DIDN_ID}.csr.pem"
 RSA_DEV_CERT="${DEV_DIR}/${RSA_DIDN_ID}.cert.pem"
+RSA_DEV_CERT_DER="${DEV_DIR}/${RSA_DIDN_ID}.cert.der"
 
 ## ECC Dev
 ECC_DEV_KEY="${DEV_DIR}/${ECC_DIDN_ID}.key.pem"
 ECC_DEV_CSR="${DEV_DIR}/${ECC_DIDN_ID}.csr.pem"
 ECC_DEV_CERT="${DEV_DIR}/${ECC_DIDN_ID}.cert.pem"
+ECC_DEV_CERT_DER="${DEV_DIR}/${ECC_DIDN_ID}.cert.der"
 
 # Signing configurations
 RSA_SSL_CONFIG="${DEV_DIR}/${RSA_DIDN_ID}.conf"
@@ -97,9 +99,11 @@ touch ${LOCAL_CA_DIR}/demoCA/index.txt.attr
 # device RSA 2048
 ##############
 cd ${LOCAL_CA_DIR}
+# Generate private key
 openssl genrsa \
     -out ${RSA_DEV_KEY} \
     2048
+# Generate CSR
 openssl req \
     -key ${RSA_DEV_KEY} \
     -new \
@@ -127,16 +131,22 @@ openssl ca \
   -extfile ${RSA_SSL_CONFIG} \
   -batch \
   -out ${RSA_DEV_CERT}
-
+# Generate DER of certificate
+openssl x509 \
+    -in ${RSA_DEV_CERT} \
+    -out ${RSA_DEV_CERT_DER} \
+    -outform DER
 
 ##############
 # Create local
 # device ECC p256
 ##############
 cd ${LOCAL_CA_DIR}
+# Generate private key
 openssl ecparam -genkey \
     -name prime256v1 \
     -out ${ECC_DEV_KEY} 
+# Generate CSR
 openssl req \
     -key ${ECC_DEV_KEY} \
     -new \
@@ -164,7 +174,11 @@ openssl ca \
   -extfile ${ECC_SSL_CONFIG} \
   -batch \
   -out ${ECC_DEV_CERT}
-
+# Generate DER of certificate
+openssl x509 \
+    -in ${ECC_DEV_CERT} \
+    -out ${ECC_DEV_CERT_DER} \
+    -outform DER
 # cat ${RSA_SSL_CONFIG}
 ##############
 # Copy files
@@ -174,9 +188,11 @@ cp -t ${CRYPTO_EXPORT_PATH} \
     ${LOCAL_CA_KEY} \
     ${LOCAL_CA_CERT} \
     ${RSA_DEV_KEY} \
+    ${RSA_DEV_CERT_DER} \
     ${RSA_DEV_CSR} \
     ${RSA_DEV_CERT} \
     ${ECC_DEV_KEY} \
+    ${ECC_DEV_CERT_DER} \
     ${ECC_DEV_CSR} \
     ${ECC_DEV_CERT}
 
