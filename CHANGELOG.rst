@@ -2,8 +2,61 @@ Changelog
 =========
 
 
-v0.9
-----
+v0.10
+-----
+
+Changes
+~~~~~~~
+- Generate DER certificates, include as a control in testing when
+  changing representations between PEM, TLSA, DER. [Ash Wilson]
+
+Other
+~~~~~
+- Build(deps): update requests requirement from ~=2.24.0 to
+  >=2.24,<2.26. [dependabot[bot]]
+
+  Updates the requirements on [requests](https://github.com/psf/requests) to permit the latest version.
+  - [Release notes](https://github.com/psf/requests/releases)
+  - [Changelog](https://github.com/psf/requests/blob/master/HISTORY.md)
+  - [Commits](https://github.com/psf/requests/compare/v2.24.0...v2.25.1)
+- Build(deps): bump dnspython from 2.0.0 to 2.1.0. [dependabot[bot]]
+
+  Bumps [dnspython](https://github.com/rthalley/dnspython) from 2.0.0 to 2.1.0.
+  - [Release notes](https://github.com/rthalley/dnspython/releases)
+  - [Changelog](https://github.com/rthalley/dnspython/blob/master/doc/whatsnew.rst)
+  - [Commits](https://github.com/rthalley/dnspython/compare/v2.0.0...v2.1.0)
+- Build(deps): update pytest-cov requirement from ~=2.10 to ~=2.11.
+  [dependabot[bot]]
+
+  Updates the requirements on [pytest-cov](https://github.com/pytest-dev/pytest-cov) to permit the latest version.
+  - [Release notes](https://github.com/pytest-dev/pytest-cov/releases)
+  - [Changelog](https://github.com/pytest-dev/pytest-cov/blob/master/CHANGELOG.rst)
+  - [Commits](https://github.com/pytest-dev/pytest-cov/compare/v2.10.0...v2.11.1)
+- Build(deps): update requests-mock requirement from ~=1.8.0 to ~=1.9.2.
+  [dependabot[bot]]
+
+  Updates the requirements on [requests-mock](https://github.com/jamielennox/requests-mock) to permit the latest version.
+  - [Release notes](https://github.com/jamielennox/requests-mock/releases)
+  - [Commits](https://github.com/jamielennox/requests-mock/compare/1.8.0...1.9.2)
+- Build(deps): update sphinx requirement from ~=3.1 to ~=4.0.
+  [dependabot[bot]]
+
+  Updates the requirements on [sphinx](https://github.com/sphinx-doc/sphinx) to permit the latest version.
+  - [Release notes](https://github.com/sphinx-doc/sphinx/releases)
+  - [Changelog](https://github.com/sphinx-doc/sphinx/blob/4.x/CHANGES)
+  - [Commits](https://github.com/sphinx-doc/sphinx/compare/v3.1.0...v4.0.1)
+- Build(deps): update pytest requirement from ~=6.0 to ~=6.2.
+  [dependabot[bot]]
+
+  Updates the requirements on [pytest](https://github.com/pytest-dev/pytest) to permit the latest version.
+  - [Release notes](https://github.com/pytest-dev/pytest/releases)
+  - [Changelog](https://github.com/pytest-dev/pytest/blob/main/CHANGELOG.rst)
+  - [Commits](https://github.com/pytest-dev/pytest/compare/6.0.0...6.2.4)
+- Create dependabot.yml. [Peter Goldstein]
+
+
+v0.9 (2021-03-02)
+-----------------
 
 Changes
 ~~~~~~~
