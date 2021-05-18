@@ -123,7 +123,7 @@ class Identity:
             return False, "Validation against CA certificate failed."
         return True, "Format and authority CA signature verified."
 
-    def get_first_entity_certificate_by_type(self, cert_type, strict=False):
+    def get_first_entity_certificate_by_type(self, cert_type, strict=True):
         """Return the first certificate of ``cert_type`` for the identity.
         
         Supported certificate types:
