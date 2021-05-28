@@ -2,8 +2,39 @@ Changelog
 =========
 
 
-v0.10
+v0.12
 -----
+
+New
+~~~
+- Implement new method for Identity to retrieve first entity
+  certificate. [Ash Wilson]
+
+  Close #56
+
+Other
+~~~~~
+- Build(deps): update requests-mock requirement from ~=1.9.2 to ~=1.9.3.
+  [dependabot[bot]]
+
+  Updates the requirements on [requests-mock](https://github.com/jamielennox/requests-mock) to permit the latest version.
+  - [Release notes](https://github.com/jamielennox/requests-mock/releases)
+  - [Commits](https://github.com/jamielennox/requests-mock/compare/1.9.2...1.9.3)
+
+
+v0.11 (2021-05-18)
+------------------
+- Build(deps): update pytest-cov requirement from ~=2.11 to ~=2.12.
+  [dependabot[bot]]
+
+  Updates the requirements on [pytest-cov](https://github.com/pytest-dev/pytest-cov) to permit the latest version.
+  - [Release notes](https://github.com/pytest-dev/pytest-cov/releases)
+  - [Changelog](https://github.com/pytest-dev/pytest-cov/blob/master/CHANGELOG.rst)
+  - [Commits](https://github.com/pytest-dev/pytest-cov/compare/v2.11.0...v2.12.0)
+
+
+v0.10 (2021-05-11)
+------------------
 
 Changes
 ~~~~~~~
