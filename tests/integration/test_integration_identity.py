@@ -3,7 +3,7 @@ import os
 import pprint
 
 import pytest
-import requests_mock
+# import requests_mock
 
 from dane_discovery.dane import DANE
 from dane_discovery.identity import Identity
@@ -96,6 +96,21 @@ class TestIntegrationIdentity:
             # And here we don't have a match.
             cert = identity.get_first_entity_certificate_by_type("PKIX-EE", strict=True)
             assert cert == ""
+
+    def test_integration_identity_get_first_entity_certificate(self):
+        """Test getting entity certificate, strict."""
+        for identity_name in identity_names:
+            identity = Identity(identity_name)
+            print("Identity: {}".format(identity_name))
+            tlsa_dict = DANE.process_response(self.tlsa_for_cert(identity_name))
+            print("TLSA: {}".format(tlsa_dict))
+            identity.dane_credentials = [identity.process_tlsa(record) for record
+                                         in [tlsa_dict]]
+            identity.dnssec = True
+            identity.tls = True
+            identity.tcp = True
+            # We get a cert here.
+            cert = identity.get_first_entity_certificate(strict=True)
 
     def test_integration_identity_validate_certificate_pkix_cd_pass(self, requests_mock):
         """Test validating a local certificate when certificate_usage is 4."""

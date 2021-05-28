@@ -123,6 +123,45 @@ class Identity:
             return False, "Validation against CA certificate failed."
         return True, "Format and authority CA signature verified."
 
+    def get_first_entity_certificate(self, strict=True):
+        """Return the first entity certificate for the identity.
+
+        Keyword args:
+            strict (bool): Raise TLSAError if certificate was not retrieved
+                with the benefit of DNSSEC, or in the case of PKIX-CD, if the
+                certificate can not be validated via PKI.
+        
+        Raise:
+            TLSAError: If strict is set to ``True`` and the certificate cannot
+                be validated by carrying a DNSSEC RRSIG. If ``certificate_usage`` 
+                is set to ``4``, PKIX validation may be attempted in lieu of 
+                DNSSEC.
+            ValueError: If ``cert_type`` is unsupported.
+        
+        Return:
+            cryptography.x509.Certificate: Certificate object as parsed 
+                from TLSA record.
+        """
+        supported_certificate_types = {"PKIX-EE": 1, "DANE-EE": 3, "PKIX-CD": 4}
+        target = ""
+        # Find a matching credential
+        for cred in self.dane_credentials:
+            if not cred["tlsa_parsed"]["matching_type"] == 0:
+                continue
+            target = cred if cred["tlsa_parsed"]["certificate_usage"] in [1, 3, 4] else ""
+            if target:
+                break
+        if not target:
+            raise TLSAError("No entity certificate found for {}.".format(self.dnsname))
+        if strict:
+            try:
+                target["tlsa_parsed"]["dnssec"] = self.dnssec
+                DANE.authenticate_tlsa(self.dnsname, target["tlsa_parsed"])
+            except ValueError as err:
+                raise TLSAError(err)
+        return target["certificate_object"]
+
+
     def get_first_entity_certificate_by_type(self, cert_type, strict=True):
         """Return the first certificate of ``cert_type`` for the identity.
         
