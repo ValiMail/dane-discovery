@@ -2,8 +2,21 @@ Changelog
 =========
 
 
-v0.12
+v0.13
 -----
+
+Changes
+~~~~~~~
+- Retrieving invalid TLSA record from DNS throws TLSAError. [Ash Wilson]
+
+  Close #59
+- Update pattern for generating authority server URL. [Ash Wilson]
+
+  Close #58
+
+
+v0.12 (2021-05-28)
+------------------
 
 New
 ~~~
