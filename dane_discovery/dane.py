@@ -298,7 +298,7 @@ class DANE:
         ``certificate_association`` field must contain a certificate
         which bears a signature which can be authenticated by the 
         certificate found at 
-        ``https://authority.${IDTYPE}.${DOMAIN}/ca/${AKI}.pem``. The
+        ``https://${IDTYPE}.${DOMAIN}/ca/${AKI}.pem``. The
         ``IDTYPE`` and ``DOMAIN`` variables are extracted from the 
         entity's DNS name, and the ``AKI`` is extracted from the 
         TLSA record's ``certificate_associattion`` field.
@@ -429,15 +429,16 @@ class DANE:
         authority_dns_labels = []
         identity_labels = identity_name.split(".")
         identity_labels.reverse()
+        identity_type_label = ""
         # Build DNS name from right to left, stopping at underscore label.
         for label in identity_labels:
             if label.startswith("_"):
-                authority_dns_labels.append(label.replace("_", ""))
-                authority_dns_labels.append("authority")
+                identity_type_label = label.replace("_", "")
+                authority_dns_labels.append(identity_type_label)
                 break
             else:
                 authority_dns_labels.append(label)
-        if not authority_dns_labels[-1] == "authority":
+        if not identity_type_label:
             raise ValueError("Malformed identity name {}.".format(identity_name))
         authority_dns_labels.reverse()
         authority_hostname = ".".join(authority_dns_labels)

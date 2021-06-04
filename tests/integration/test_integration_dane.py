@@ -261,9 +261,9 @@ class TestIntegrationDane:
     
     def test_integration_dane_generate_url_for_ca_certificate(self):
         """Test generation of the CA certificate URL."""
-        authority_hostname = "authority.device.example.com"
+        authority_hostname = "device.example.com"
         aki = "aa-bc-de-00-12-34"
-        auth_name = "https://authority.device.example.com/ca/aa-bc-de-00-12-34.pem"
+        auth_name = "https://device.example.com/ca/aa-bc-de-00-12-34.pem"
         result = DANE.generate_url_for_ca_certificate(authority_hostname, aki)
         assert  result == auth_name
 
@@ -296,7 +296,7 @@ class TestIntegrationDane:
             id_cert = self.get_dyn_asset("{}.cert.pem".format(id_name))
             aki = DANE.get_authority_key_id_from_certificate(id_cert)
             ca_certificate = self.get_dyn_asset(ca_certificate_name)
-            requests_mock.get("https://authority.device.example.net/ca/{}.pem".format(aki), 
+            requests_mock.get("https://device.example.net/ca/{}.pem".format(aki), 
                               content=ca_certificate)
             retrieved = DANE.get_ca_certificate_for_identity(id_name, id_cert)
             assert retrieved == ca_certificate
@@ -308,7 +308,7 @@ class TestIntegrationDane:
             aki = DANE.get_authority_key_id_from_certificate(entity_certificate)
             x509_obj = DANE.build_x509_object(entity_certificate)
             ca_certificate = self.get_dyn_asset("ca.example.net.cert.pem")
-            requests_mock.get("https://authority.device.example.net/ca/{}.pem".format(aki), 
+            requests_mock.get("https://device.example.net/ca/{}.pem".format(aki), 
                               content=ca_certificate)
             cert_bytes = x509_obj.public_bytes(encoding=serialization.Encoding.DER)
             certificate_association = binascii.hexlify(cert_bytes).decode()
@@ -324,7 +324,7 @@ class TestIntegrationDane:
             aki = DANE.get_authority_key_id_from_certificate(entity_certificate)
             x509_obj = DANE.build_x509_object(entity_certificate)
             ca_certificate = self.get_dyn_asset("{}.cert.pem".format(id_name))
-            requests_mock.get("https://authority.device.example.net/ca/{}.pem".format(aki),
+            requests_mock.get("https://device.example.net/ca/{}.pem".format(aki),
                               content=ca_certificate)
             cert_bytes = x509_obj.public_bytes(encoding=serialization.Encoding.DER)
             certificate_association = binascii.hexlify(cert_bytes).decode()
