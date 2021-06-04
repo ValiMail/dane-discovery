@@ -493,7 +493,7 @@ class DANE:
         Return: 
             str: URL where a CA certificate should be found.
         """
-        path = "ca/{}.pem".format(authority_key_id)
+        path = ".well-known/ca/{}.pem".format(authority_key_id)
         authority_url = urllib.parse.urlunsplit(["https", authority_hostname, path, "", ""])
         return authority_url
 
