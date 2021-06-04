@@ -70,4 +70,8 @@ class TestUnitDane:
         with pytest.raises(TLSAError) as err:
             DANE.process_response(response)
         assert "certificate association" in str(err)
-        
+
+    def test_unit_generate_url_for_ca_certificate(self):
+        desired = "https://device.organization.example/.well-known/ca/a-k-i.pem"
+        actual = DANE.generate_url_for_ca_certificate("device.organization.example", "a-k-i")
+        assert desired == actual
