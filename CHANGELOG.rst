@@ -2,11 +2,22 @@ Changelog
 =========
 
 
-v0.13
+v0.14
 -----
 
 Changes
 ~~~~~~~
+- Include /.well-known/ in CA URL. [Ash Wilson]
+
+  Close #62
+
+
+v0.13 (2021-06-04)
+------------------
+
+Changes
+~~~~~~~
+- Incerement minor version, update CHANGELOG.rst. [Ash Wilson]
 - Retrieving invalid TLSA record from DNS throws TLSAError. [Ash Wilson]
 
   Close #59
