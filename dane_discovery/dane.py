@@ -1,6 +1,7 @@
 """DANE class definition."""
 import binascii
 import hashlib
+import re
 import requests
 import urllib
 
@@ -260,7 +261,35 @@ class DANE:
         result["selector"] = int(resp_list.pop(0))
         result["matching_type"] = int(resp_list.pop(0))
         result["certificate_association"] = "".join(resp_list).replace(" ", "")
+        cls.validate_tlsa_fields(result)
         return result
+
+    @classmethod
+    def validate_tlsa_fields(cls, tlsa_fields):
+        """Validate the fields that come from DNS.
+
+        Args:
+            tlsa_fields (dict): Must contain the following keys:
+                ``certificate_usage``, ``selector``, ``matching_type``, 
+                ``certificate_association``.
+
+        Return:
+            None
+            
+        Raises:
+            TLSAError if record is malformed.
+        """
+        issues = []
+        if int(tlsa_fields["certificate_usage"]) not in [0, 1, 2, 3, 4]:
+            issues.append("invalid certificate usage value")
+        if int(tlsa_fields["selector"]) not in [0, 1]:
+            issues.append("invalid selector value")
+        if int(tlsa_fields["matching_type"]) not in [0, 1, 2]:
+            issues.append("invalid matching type value")
+        if not re.match("^[A-Za-z0-9]+$", tlsa_fields["certificate_association"]):
+            issues.append("invalid certificate association value")
+        if issues:
+            raise TLSAError("Malformed DNS record: {}.".format(", ".join(issues)))
 
     @classmethod
     def validate_certificate(cls, certificate):

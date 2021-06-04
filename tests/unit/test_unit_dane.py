@@ -63,3 +63,11 @@ class TestUnitDane:
         assert processed["selector"] == 1
         assert processed["matching_type"] == 2
         assert processed["certificate_association"] == cert_assoc
+
+    def test_unit_process_response_fail(self):
+        """Test validation failure."""
+        response = r"name.example.com 123 IN TLSA 3 1 2 55F6DB74C524ACCA28..\..\B52C0BCFC28EEC4596F90D00C 596F90D0"
+        with pytest.raises(TLSAError) as err:
+            DANE.process_response(response)
+        assert "certificate association" in str(err)
+        
