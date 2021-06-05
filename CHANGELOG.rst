@@ -2,11 +2,21 @@ Changelog
 =========
 
 
-v0.14
+v0.15
 -----
+
+Fix
+~~~
+- Correct issue with CLI scripts being excluded from package. [Ash
+  Wilson]
+
+
+v0.14 (2021-06-04)
+------------------
 
 Changes
 ~~~~~~~
+- Increment minor version, update CHANGELOG.rst. [Ash Wilson]
 - Include /.well-known/ in CA URL. [Ash Wilson]
 
   Close #62
