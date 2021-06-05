@@ -1,7 +1,7 @@
 """Setup script for dane-discovery."""
 import os
 import re
-from setuptools import setup
+from setuptools import setup, find_packages
 
 
 PROJECT_NAME = "dane_discovery"
@@ -35,8 +35,8 @@ setup(name=PROJECT_NAME,
       license="BSD",
       keywords="dane tlsa dns certificate discovery",
       url="https://github.com/valimail/{}".format(PROJECT_NAME),
-      packages=[PROJECT_NAME],
       long_description=build_long_desc(),
+      packages=["dane_discovery", "dane_discovery.scripts"],
       entry_points={
           "console_scripts": [
               "dane_discovery_get_certificates = dane_discovery.scripts.dane_discovery_get_certificates:main",
