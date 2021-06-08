@@ -75,3 +75,9 @@ class TestUnitDane:
         desired = "https://device.organization.example/.well-known/ca/a-k-i.pem"
         actual = DANE.generate_url_for_ca_certificate("device.organization.example", "a-k-i")
         assert desired == actual
+
+    def test_format_keyid(self):
+        """Make sure that the KeyID formatter is correct."""
+        desired = "ab-cd-ef-gh"
+        instring = "abcdefgh"
+        assert DANE.format_keyid(instring) == desired
