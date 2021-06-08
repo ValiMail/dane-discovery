@@ -1,20 +1,26 @@
 version: 2.1
 
 workflows:
-  version: 2
-  test_build:
+  run_tests:
     jobs:
       - build_and_test:
-          filters:
-            tags:
-              only: /.*/
-      - packaging_test:
-          filters:
-            tags:
-              only: /.*/
+          name: py36
+          python_version: "3.6"
+      - build_and_test:
+          name: py37
+          python_version: "3.7"
+      - build_and_test:
+          name: py38
+          python_version: "3.8"
+      - packaging_test
+      - build_and_test_with_coverage:
+          requires:
+            - py36
+            - py37
+            - py38
       - deploy:
           requires:
-            - build_and_test
+            - build_and_test_with_coverage
           filters:
             tags:
               only: /^v.*/
@@ -23,12 +29,15 @@ workflows:
 
 jobs:
   build_and_test:
+    parameters:
+       python_version:
+         type: string
     docker:
-      - image: circleci/python:3.8
+      - image: circleci/python:<< parameters.python_version >>
     steps:
       - checkout
       - run:
-          name: Cenerate crypto test materials
+          name: Generate crypto test materials
           command: |
             ls -l
             export ORIGIN=${PWD}
@@ -42,6 +51,54 @@ jobs:
       - run:
           name: Install deps and package
           command: |
+            pip3 install -r requirements-test.txt
+            pip3 install .
+      - run:
+          name: Install deps and run unit and integration tests
+          command: |
+            python3 -m py.test --cov=dane_discovery --cov-report=xml --cov-report=term-missing
+  
+  build_and_test_with_coverage:
+    docker:
+      - image: circleci/python:3.8
+    steps:
+      - checkout
+      - run:
+          name: Generate crypto test materials
+          command: |
+            ls -l
+            export ORIGIN=${PWD}
+            cp tests/scripts/generate_crypto.sh ./
+            cp tests/configs/ssl.cnf ./
+            bash ./generate_crypto.sh
+            cd ${ORIGIN}
+            mkdir -p tests/fixtures/dynamic
+            sudo cp ${HOME}/export/* tests/fixtures/dynamic/
+            sudo chown -R `whoami` ${HOME}
+      - run:
+          name: Install deps and package
+          command: |
+            pip3 install -r requirements-test.txt
+            pip3 install .
+      - run:
+          name: Install deps, run unit and integration tests, publish coverage
+          command: |
+            curl -L https://codeclimate.com/downloads/test-reporter/test-reporter-latest-linux-amd64 > ./cc-test-reporter
+            chmod +x ./cc-test-reporter
+            ./cc-test-reporter before-build
+            python3 -m py.test --cov=dane_discovery --cov-report=xml --cov-report=term-missing
+            ./cc-test-reporter format-coverage -t coverage.py ./coverage.xml
+            ./cc-test-reporter upload-coverage
+            ./cc-test-reporter after-build --exit-code $?
+
+  build_docs:
+    docker:
+      - image: circleci/python:3.8
+    steps:
+      - checkout
+      - run:
+          name: Install deps and package
+          command: |
             pip3 install -r requirements-develop.txt
             pip3 install -r requirements-test.txt
             pip3 install -r requirements-doc.txt
@@ -51,16 +108,6 @@ jobs:
           command: |
             cd docs
             make html
-      - run:
-          name: Install deps and run unit and integration tests
-          command: |
-            curl -L https://codeclimate.com/downloads/test-reporter/test-reporter-latest-linux-amd64 > ./cc-test-reporter
-            chmod +x ./cc-test-reporter
-            ./cc-test-reporter before-build
-            python3 -m py.test --cov=dane_discovery --cov-report=xml --cov-report=term-missing
-            ./cc-test-reporter format-coverage -t coverage.py ./coverage.xml
-            ./cc-test-reporter upload-coverage
-            ./cc-test-reporter after-build --exit-code $?
       - run:
           name: Trigger build in RTD
           command: |
