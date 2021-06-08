@@ -2,8 +2,16 @@ Changelog
 =========
 
 
-v0.15
+v0.16
 -----
+
+New
+~~~
+- Establish compatibility with Python 3.6, 3.7, and 3.8. [Ash Wilson]
+
+
+v0.15 (2021-06-05)
+------------------
 
 Fix
 ~~~
