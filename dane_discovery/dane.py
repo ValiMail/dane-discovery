@@ -509,7 +509,21 @@ class DANE:
         akid = cert_obj.extensions.get_extension_for_class(
             x509.AuthorityKeyIdentifier
             ).value.key_identifier
-        return binascii.hexlify(akid, '-').decode()
+        akid_hex = binascii.hexlify(akid).decode()
+        return cls.format_keyid(akid_hex)
+
+    @classmethod
+    def format_keyid(cls, keyid):
+        """Return dash-delimited string from keyid."""
+        delimiter = '-'
+        hex_bytes = []
+        keyid = [x for x in keyid]
+        keyid.reverse()
+        while keyid:
+            first = keyid.pop()
+            second = keyid.pop()
+            hex_bytes.append("{}{}".format(first, second))
+        return delimiter.join([x for x in hex_bytes])
 
     @classmethod
     def get_subject_key_id_from_certificate(cls, certificate):
@@ -521,7 +535,8 @@ class DANE:
         """
         cert_obj = cls.build_x509_object(certificate)
         skid = x509.SubjectKeyIdentifier.from_public_key(cert_obj.public_key())
-        return binascii.hexlify(skid.digest, '-').decode()
+        skid_hex = binascii.hexlify(skid.digest).decode()
+        return cls.format_keyid(skid_hex)
 
     @classmethod
     def get_ca_certificate_for_identity(cls, identity_name, certificate):
