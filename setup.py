@@ -46,7 +46,7 @@ setup(name=PROJECT_NAME,
       },
       install_requires=["dnspython==2.1.0", 
                         "cryptography~=3.0",
-                        "requests>=2.24,<2.26"],
+                        "requests>=2.24,<2.27"],
       classifiers=[
         "Development Status :: 4 - Beta",
         "Intended Audience :: Developers",
