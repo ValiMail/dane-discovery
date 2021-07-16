@@ -1,6 +1,7 @@
 """Test the DANE object."""
 import os
 import pprint
+from cryptography.hazmat.primitives import serialization
 
 import pytest
 # import requests_mock
@@ -155,6 +156,31 @@ class TestIntegrationIdentity:
         requests_mock.get("https://device.example.net/.well-known/ca/{}.pem".format(root_ski), 
                               content=root_certificate)
         assert identity.validate_certificate(certificate)
+
+    def test_integration_identity_get_pkix_cd_trust_chain(self, requests_mock):
+        """Test retrieval of a PKIX-CD trust chain."""
+        identity_name = ecc_identity_name
+        certificate_path = self.get_path_for_dyn_asset("{}.cert.pem".format(identity_name))
+        certificate = self.get_dyn_asset(certificate_path)
+        identity = Identity(identity_name)
+        tlsa_dict = DANE.process_response(self.tlsa_for_cert(identity_name, 4, 0, 0))
+        identity.dane_credentials = [identity.process_tlsa(record) for record
+                                     in [tlsa_dict]]
+        identity.tls = True
+        identity.tcp = True
+        identity.dnssec = True
+        intermediate_certificate = self.get_dyn_asset(ca_intermediate_cert_name)
+        root_certificate = self.get_dyn_asset(ca_root_cert_name)
+        intermediate_ski = DANE.get_authority_key_id_from_certificate(certificate)
+        root_ski = DANE.get_authority_key_id_from_certificate(intermediate_certificate)
+        requests_mock.get("https://device.example.net/.well-known/ca/{}.pem".format(intermediate_ski), 
+                              content=intermediate_certificate)
+        requests_mock.get("https://device.example.net/.well-known/ca/{}.pem".format(root_ski), 
+                              content=root_certificate)
+        chain = identity.get_pkix_cd_trust_chain(certificate)
+        assert chain[0] == DANE.build_x509_object(certificate).public_bytes(serialization.Encoding.PEM)
+        assert chain[1] == DANE.build_x509_object(intermediate_certificate).public_bytes(serialization.Encoding.PEM)
+        assert chain["root"] == DANE.build_x509_object(root_certificate).public_bytes(serialization.Encoding.PEM)
 
     def test_integration_identity_validate_certificate_pkix_cd_fail(self, requests_mock):
         """Test validating a local certificate when certificate_usage is 4.

@@ -207,8 +207,8 @@ class DANE:
                 ``dnssec`` (bool), ``tls`` (bool), ``tcp`` (bool).
         """
         timeout = 5
-        default_recursor = dns.resolver.get_default_resolver().nameservers[0]
-        resolver = nsaddr if nsaddr else default_recursor
+        default_resolver = dns.resolver.get_default_resolver().nameservers[0]
+        resolver = nsaddr if nsaddr else default_resolver
         query = dns.message.make_query(dnsname, rr_type, want_dnssec=True)
         query_details = {"tls": False, "dnssec": False}
         try:

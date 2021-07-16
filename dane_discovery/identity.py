@@ -7,7 +7,6 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.exceptions import InvalidSignature
-# import requests
 
 from .dane import DANE
 from .exceptions import TLSAError
@@ -123,6 +122,33 @@ class Identity:
         if not validated:
             return False, "Validation against CA certificate failed: {}.".format(reason)
         return True, "Format and authority CA signature verified."
+
+    def get_pkix_cd_trust_chain(self, certificate, max_levels=3):
+        """Return a dictionary with entire discovered trust chain.
+        
+        Args:
+            certificate (str): EE certificate to begin trust chain discovery with.
+            max_levels (int): Maximum number of parent certificates to discover. Default: 3.
+        
+        Returns:
+            dict: Dictionary with integer keys for entity cert (``0``) and intermediate CA certificates.
+                The root certificate key is ``root``.
+        """
+        certificate = DANE.build_x509_object(certificate).public_bytes(serialization.Encoding.PEM)
+        retval = {0: certificate}
+        next_level = 1
+        ca_certificates = DANE.get_ca_certificates_for_identity(self.dnsname, certificate, max_levels)
+        DANE.validate_certificate_chain(certificate, ca_certificates)
+        for cert in ca_certificates:
+            aki = DANE.get_authority_key_id_from_certificate(cert)
+            ski = DANE.get_subject_key_id_from_certificate(cert)
+            if aki == ski:
+                # The root cert is the last, so we break here.
+                retval["root"] = cert
+                break
+            retval[next_level] = cert
+            next_level += 1
+        return retval
 
     def get_first_entity_certificate(self, strict=True):
         """Return the first entity certificate for the identity.
@@ -347,7 +373,7 @@ class Identity:
         return retval
 
     def get_all_certificates(self, filters=[]):
-        """Return a dictionary of all PKIX-CD certificates for this identity.
+        """Return a dictionary of all EE certificates for this identity.
 
         This method uses available methods for validating certificates retrieved
         from TLSA records associated with the identity's DNS name. 
