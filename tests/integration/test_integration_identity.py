@@ -17,7 +17,8 @@ dyn_assets_dir = os.path.join(here_dir, "../fixtures/dynamic/")
 rsa_identity_name = "rsa.air-quality-sensor._device.example.net"
 ecc_identity_name = "ecc.air-quality-sensor._device.example.net"
 identity_names = [rsa_identity_name, ecc_identity_name]
-ca_certificate_name = "ca.example.net.cert.pem"
+ca_root_cert_name = "rootca.example.net.cert.pem"
+ca_intermediate_cert_name = "intermediateca.example.net.cert.pem"
 
 
 class TestIntegrationIdentity:
@@ -123,10 +124,14 @@ class TestIntegrationIdentity:
                                      in [tlsa_dict]]
         identity.tls = True
         identity.tcp = True
-        aki = DANE.get_authority_key_id_from_certificate(certificate)
-        ca_certificate = self.get_dyn_asset(ca_certificate_name)
-        requests_mock.get("https://device.example.net/.well-known/ca/{}.pem".format(aki), 
-                          content=ca_certificate)
+        intermediate_certificate = self.get_dyn_asset(ca_intermediate_cert_name)
+        root_certificate = self.get_dyn_asset(ca_root_cert_name)
+        intermediate_ski = DANE.get_authority_key_id_from_certificate(certificate)
+        root_ski = DANE.get_authority_key_id_from_certificate(intermediate_certificate)
+        requests_mock.get("https://device.example.net/.well-known/ca/{}.pem".format(intermediate_ski), 
+                              content=intermediate_certificate)
+        requests_mock.get("https://device.example.net/.well-known/ca/{}.pem".format(root_ski), 
+                              content=root_certificate)
         assert identity.validate_certificate(certificate)
     
     def test_integration_identity_validate_certificate_pkix_cd_dnssec_pass(self, requests_mock):
@@ -141,10 +146,14 @@ class TestIntegrationIdentity:
         identity.tls = True
         identity.tcp = True
         identity.dnssec = True
-        aki = DANE.get_authority_key_id_from_certificate(certificate)
-        ca_certificate = self.get_dyn_asset(ca_certificate_name)
-        requests_mock.get("https://device.example.net/.well-known/ca/{}.pem".format(aki), 
-                          content=ca_certificate)
+        intermediate_certificate = self.get_dyn_asset(ca_intermediate_cert_name)
+        root_certificate = self.get_dyn_asset(ca_root_cert_name)
+        intermediate_ski = DANE.get_authority_key_id_from_certificate(certificate)
+        root_ski = DANE.get_authority_key_id_from_certificate(intermediate_certificate)
+        requests_mock.get("https://device.example.net/.well-known/ca/{}.pem".format(intermediate_ski), 
+                              content=intermediate_certificate)
+        requests_mock.get("https://device.example.net/.well-known/ca/{}.pem".format(root_ski), 
+                              content=root_certificate)
         assert identity.validate_certificate(certificate)
 
     def test_integration_identity_validate_certificate_pkix_cd_fail(self, requests_mock):
@@ -160,11 +169,16 @@ class TestIntegrationIdentity:
                                      in [tlsa_dict]]
         identity.tls = True
         identity.tcp = True
-        aki = DANE.get_authority_key_id_from_certificate(certificate)
-        ca_certificate = self.get_dyn_asset(ca_certificate_name)
-        requests_mock.get("https://device.example.net/.well-known/ca/{}.pem".format(aki), 
-                          content=ca_certificate)
-        assert identity.validate_certificate(certificate)
+        intermediate_certificate = self.get_dyn_asset(ca_intermediate_cert_name)
+        root_certificate = self.get_dyn_asset(ca_root_cert_name)
+        intermediate_ski = DANE.get_authority_key_id_from_certificate(certificate)
+        root_ski = DANE.get_authority_key_id_from_certificate(intermediate_certificate)
+        requests_mock.get("https://device.example.net/.well-known/ca/{}.pem".format(intermediate_ski), 
+                              content=intermediate_certificate)
+        requests_mock.get("https://device.example.net/.well-known/ca/{}.pem".format(root_ski), 
+                              content=certificate)
+        valid, _reason = identity.validate_certificate(certificate)
+        assert not valid
     
     def test_integration_identity_validate_certificate_pkix_cd_dnssec_fail(self, requests_mock):
         """Test validating a local certificate when certificate_usage is 4 and DNSSEC is present.
@@ -181,10 +195,11 @@ class TestIntegrationIdentity:
         identity.tcp = True
         identity.dnssec = True
         aki = DANE.get_authority_key_id_from_certificate(certificate)
-        ca_certificate = self.get_dyn_asset(ca_certificate_name)
+        ca_certificate = self.get_dyn_asset(certificate_path)
         requests_mock.get("https://device.example.net/.well-known/ca/{}.pem".format(aki), 
                           content=ca_certificate)
-        assert identity.validate_certificate(certificate)
+        valid, _reason = identity.validate_certificate(certificate)
+        assert not valid
 
     def test_integration_identity_get_all_certs_for_identity(self, requests_mock):
         """Test retrieval of all PKIX-CD certs for an identity."""
@@ -200,18 +215,21 @@ class TestIntegrationIdentity:
         identity.tls = True
         identity.tcp = True
         identity.dnssec = True
-        ca_certificate = self.get_dyn_asset(ca_certificate_name)
         certificate_path = self.get_path_for_dyn_asset("{}.cert.pem".format(identity_name1))
         certificate = self.get_dyn_asset(certificate_path)
         # Both identities have the same CA.
-        aki = DANE.get_authority_key_id_from_certificate(certificate)
-        requests_mock.get("https://device.example.net/.well-known/ca/{}.pem".format(aki), 
-                          content=ca_certificate)
+        intermediate_certificate = self.get_dyn_asset(ca_intermediate_cert_name)
+        root_certificate = self.get_dyn_asset(ca_root_cert_name)
+        intermediate_ski = DANE.get_authority_key_id_from_certificate(certificate)
+        root_ski = DANE.get_authority_key_id_from_certificate(intermediate_certificate)
+        requests_mock.get("https://device.example.net/.well-known/ca/{}.pem".format(intermediate_ski), 
+                              content=intermediate_certificate)
+        requests_mock.get("https://device.example.net/.well-known/ca/{}.pem".format(root_ski), 
+                              content=root_certificate)
         certs = identity.get_all_certificates()
-        # We only have two UNIQUE certs, across four TLSA records.
-        assert len(certs) == 2
-        cert_list = [y for x, y in certs.items()]
-        assert cert_list[0] != cert_list[1]
+        # We only have one valid cert, across four TLSA records.
+        pprint.pprint(certs)
+        assert len(certs) == 1
 
     def test_integration_identity_get_all_certs_for_identity_filtered(self, requests_mock):
         """Test retrieval of all PKIX-CD certs for an identity."""
@@ -227,13 +245,17 @@ class TestIntegrationIdentity:
         identity.tls = True
         identity.tcp = True
         identity.dnssec = True
-        ca_certificate = self.get_dyn_asset(ca_certificate_name)
         certificate_path = self.get_path_for_dyn_asset("{}.cert.pem".format(identity_name1))
         certificate = self.get_dyn_asset(certificate_path)
         # Both identities have the same CA.
-        aki = DANE.get_authority_key_id_from_certificate(certificate)
-        requests_mock.get("https://device.example.net/.well-known/ca/{}.pem".format(aki), 
-                          content=ca_certificate)
+        intermediate_certificate = self.get_dyn_asset(ca_intermediate_cert_name)
+        root_certificate = self.get_dyn_asset(ca_root_cert_name)
+        intermediate_ski = DANE.get_authority_key_id_from_certificate(certificate)
+        root_ski = DANE.get_authority_key_id_from_certificate(intermediate_certificate)
+        requests_mock.get("https://device.example.net/.well-known/ca/{}.pem".format(intermediate_ski), 
+                              content=intermediate_certificate)
+        requests_mock.get("https://device.example.net/.well-known/ca/{}.pem".format(root_ski), 
+                              content=root_certificate)
         certs = identity.get_all_certificates(filters=["PKIX-EE"])
         # We only have one PKIX-EE cert.
         assert len(certs) == 1

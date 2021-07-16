@@ -53,7 +53,7 @@ class Identity:
     def validate_certificate(self, certificate):
         """Validate certificate against DANE identity records in DNS.
         
-        This method returns two valufes, success and status.
+        This method returns two values, success and status.
 
         This method only checks against TLSA records with
         certificate_usage 4, or PKIX-CD.
@@ -112,15 +112,16 @@ class Identity:
         cert_association = credential["tlsa_parsed"]["certificate_association"]
         tlsa_der = DANE.certificate_association_to_der(cert_association)
         if not cert_der == tlsa_der:
-            return False, "Certificate and TLSA certificate association do nt match."
+            return False, "Certificate and TLSA certificate association do not match."
         # Get the CA certificate
         try:
-            ca_pem = DANE.get_ca_certificate_for_identity(self.dnsname, cert_der)
+            ca_pems = DANE.get_ca_certificates_for_identity(self.dnsname, cert_der)
         except ValueError as err:
             return False, str(err)
-        ca_validation = DANE.verify_certificate_signature(cert_der, ca_pem)
-        if not ca_validation:
-            return False, "Validation against CA certificate failed."
+        cert_pem = cert_obj.public_bytes(serialization.Encoding.PEM)
+        validated, reason = DANE.validate_certificate_chain(cert_pem, ca_pems)
+        if not validated:
+            return False, "Validation against CA certificate failed: {}.".format(reason)
         return True, "Format and authority CA signature verified."
 
     def get_first_entity_certificate(self, strict=True):
