@@ -38,12 +38,28 @@ class DANE:
         if isinstance(certificate, str):
             certificate = certificate.encode()
         try:
-            return x509.load_pem_x509_certificate(certificate,
+            x5cert = cls.clean_up_certificate(certificate)
+            return x509.load_pem_x509_certificate(x5cert,
                                                   default_backend())
         except ValueError:  # This hits if it's a DER cert.
             pass
         return x509.load_der_x509_certificate(certificate,
                                               default_backend())
+
+    @classmethod
+    def clean_up_certificate(cls, certificate):
+        """This method returns a clean PEM-encoded certificate."""
+        if isinstance(certificate, bytes):
+            certificate = certificate.decode("utf-8")
+        in_lines = certificate.splitlines()
+        out_lines = []
+        for line in in_lines:
+            if line.startswith(" "):
+                continue
+            if line.startswith("Certificate:"):
+                continue
+            out_lines.append(line)
+        return "\n".join(out_lines).encode()
 
     @classmethod
     def generate_tlsa_record(cls, certificate_usage, selector,
@@ -191,8 +207,8 @@ class DANE:
                 ``dnssec`` (bool), ``tls`` (bool), ``tcp`` (bool).
         """
         timeout = 5
-        default_recursor = dns.resolver.get_default_resolver().nameservers[0]
-        resolver = nsaddr if nsaddr else default_recursor
+        default_resolver = dns.resolver.get_default_resolver().nameservers[0]
+        resolver = nsaddr if nsaddr else default_resolver
         query = dns.message.make_query(dnsname, rr_type, want_dnssec=True)
         query_details = {"tls": False, "dnssec": False}
         try:
@@ -367,10 +383,11 @@ class DANE:
         id_cert = cls.der_to_pem(certificate_der)
         try:
             # print("Load CA cert")
-            ca_cert = cls.get_ca_certificate_for_identity(dns_name, id_cert)
+            ca_certs = cls.get_ca_certificates_for_identity(dns_name, id_cert)
             # print("Test cert sig.")
-            if not cls.verify_certificate_signature(id_cert, ca_cert):
-                errmsg += "PKIX signature validation for identity failed.\n"
+            pkix_valid, reason = cls.validate_certificate_chain(id_cert, ca_certs)
+            if not pkix_valid:
+                errmsg += "PKIX signature validation for identity failed: {}.\n".format(reason)
             # print("verify DNS name")
             if not cls.verify_dnsname(dns_name, certificate_der):
                 errmsg += "DNS name match against SAN failed.\n"
@@ -403,8 +420,63 @@ class DANE:
         return san.value.get_values_for_type(x509.DNSName)
 
     @classmethod
-    def verify_certificate_signature(cls, entity_certificate, ca_certificate):
-        """ Return True if entity_certificate was signed by ca_certificate.
+    def validate_certificate_chain(cls, entity_certificate, ca_certificates):
+        """Return True if PKI trust chain is established from entity to CA.
+        
+        This method attempts cryptographic validation of ``entity_certificate`` 
+        against the list of ``ca_certificates``. This method only checks 
+        public keys and signatures, independent of any x509v3 extensions.
+
+        The validation process completes successfully if a self-signed CA
+        certificate is encountered in ``ca_certificates``, which terminates a
+        cryptographically-validated chain from the entity certificate.
+
+        Args:
+            entity_certificate (str): Entity certificate to be verified.
+            ca_certificates (list of str): List of CA certificates for validating
+                ``entity_certificate``.
+        
+        returns:
+            (True, None) if certificate validates.
+            (False, str) if certificate does not validate, and str will contain the reason.
+        """
+        validation = {cls.get_subject_key_id_from_certificate(c): c
+                      for c in ca_certificates if cls.is_a_ca_certificate(c)}
+        currently_validating = x509.load_pem_x509_certificate(entity_certificate, default_backend()).public_bytes(serialization.Encoding.PEM)
+        if not validation:
+            return (False, "No CA certificates!")
+        # While we still have certs in the list...
+        while validation:
+            current_aki = cls.get_authority_key_id_from_certificate(currently_validating)
+            # If we don't have a CA cert that matches the current entity's AKI, we bail.
+            if current_aki not in validation:
+                msg = "Parent certificate not found!"
+                return (False, msg)
+            identified_parent = validation[current_aki]
+            # If the signature doesn't match, bail.
+            if not cls.verify_certificate_signature(currently_validating, identified_parent):
+                msg = "Cryptographic certificate validation failed!"
+                return (False, msg)
+            # If the parent CA certificate is self-signed...
+            if cls.get_authority_key_id_from_certificate(identified_parent) == cls.get_subject_key_id_from_certificate(identified_parent):
+                return (True, None)
+            currently_validating = x509.load_pem_x509_certificate(validation[current_aki], default_backend()).public_bytes(serialization.Encoding.PEM)
+            del(validation[current_aki])
+        msg = "Unable to build trust chain to self-signed CA certificate."
+        return (False, msg)
+
+    @classmethod
+    def is_a_ca_certificate(cls, certificate):
+        """Return True if ``certificate`` is a CA certificate."""
+        x5_obj = DANE.build_x509_object(certificate)
+        basic_constraints = x5_obj.extensions.get_extension_for_class(x509.BasicConstraints)
+        if basic_constraints.value.ca is True:
+            return True
+        return False
+
+    @classmethod
+    def verify_certificate_signature(cls, certificate, ca_certificate):
+        """ Return True if certificate was signed by ca_certificate.
 
         Args:
             entity_certificate (str): entity certificate in DER or PEM format.
@@ -414,7 +486,7 @@ class DANE:
             bool: True if the ca_certificate validates the entity_certificate.
         """
         issuer_public_key = DANE.build_x509_object(ca_certificate).public_key()
-        cert_to_check = DANE.build_x509_object(entity_certificate)
+        cert_to_check = DANE.build_x509_object(certificate)
         if isinstance(issuer_public_key, RSAPublicKey):
             try:
                 issuer_public_key.verify(cert_to_check.signature,
@@ -539,9 +611,55 @@ class DANE:
         return cls.format_keyid(skid_hex)
 
     @classmethod
+    def get_ca_certificates_for_identity(cls, identity_name, certificate, max_levels=3):
+        """Return the CA certificates for verifying identity_name.
+        
+        Returns the PEM representation of the CA certificates
+        used for verifying any DANE PKIX-CD certificate 
+        associated with ``identity_name``.
+
+        Args:
+            identity_name (str): DNS name of identity.
+            certificate (str): Certificate in PEM or DER format.
+            max_levels (int): Only retrieve this many parent certificates.
+
+        Raise:
+            ValueError if no CA certificate is found or the
+                certificate is not parseable.
+
+        Return:
+            list: CA certificates which authenticate identity certificate.
+        """
+        ca_certs = []
+        authority_hostname = cls.generate_authority_hostname(identity_name)
+        current_cert = x509.load_pem_x509_certificate(certificate, default_backend()).public_bytes(serialization.Encoding.PEM)
+        while True:
+            try:
+                parent_ski = cls.get_authority_key_id_from_certificate(current_cert)
+            except ValueError:
+                print("ValueError when parsing {}".format(current_cert))
+            ca_certificate_url = cls.generate_url_for_ca_certificate(authority_hostname, parent_ski)
+            r = requests.get(ca_certificate_url)
+            presumed_pem = r.content
+            if not r:
+                raise ValueError("CA certificate not found at {}".format(ca_certificate_url))
+            # The following line raises ValueError if it fails to parse.
+            pem = x509.load_pem_x509_certificate(presumed_pem, default_backend()).public_bytes(serialization.Encoding.PEM)
+            # This catches self-signed certs.
+            if pem in ca_certs:
+                break
+            ca_certs.append(pem)
+            current_cert = pem
+            if len(ca_certs) >= max_levels:
+                break
+        return ca_certs
+    
+    @classmethod
     def get_ca_certificate_for_identity(cls, identity_name, certificate):
         """Return the CA certificate for verifying identity_name.
         
+        DEPRECATED. USE `get_ca_certificates_for_identity`
+
         Returns the PEM representation of the CA certificate
         used for verifying any DANE PKIX-CD certificate 
         associated with ``identity_name``.

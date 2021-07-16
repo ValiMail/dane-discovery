@@ -18,7 +18,9 @@ dyn_assets_dir = os.path.join(here_dir, "../fixtures/dynamic/")
 rsa_identity_name = "rsa.air-quality-sensor._device.example.net"
 ecc_identity_name = "ecc.air-quality-sensor._device.example.net"
 identity_names = [rsa_identity_name, ecc_identity_name]
-ca_certificate_name = "ca.example.net.cert.pem"
+ca_root_cert_name = "rootca.example.net.cert.pem"
+ca_intermediate_cert_name = "intermediateca.example.net.cert.pem"
+# ca_certificate_name = "ca.example.net.cert.pem"
 tlsa_record_full = (
     "red._device.example.com. 373 IN TLSA 3 0 0 308203863082026ea00"
     "302010202147072506e7e305c5567afb31a27426b1af4b16c5c300d06092a864"
@@ -246,8 +248,9 @@ class TestIntegrationDane:
         for identity_name in identity_names:
             print("Checking signature of {}'s certificate".format(identity_name))
             entity_certificate = self.get_dyn_asset("{}.cert.pem".format(identity_name))
-            ca_certificate = self.get_dyn_asset(ca_certificate_name)
-            assert DANE.verify_certificate_signature(entity_certificate, ca_certificate)
+            root_ca_certificate = self.get_dyn_asset(ca_root_cert_name)
+            intermediate_ca_certificate = self.get_dyn_asset(ca_intermediate_cert_name)
+            assert DANE.verify_certificate_signature(entity_certificate, intermediate_ca_certificate)
             print("Success.")
 
     def test_integration_dane_verify_certificate_signature_fail(self):
@@ -294,28 +297,40 @@ class TestIntegrationDane:
         """Test getting a CA certificate for an identity name."""
         for id_name in identity_names:
             id_cert = self.get_dyn_asset("{}.cert.pem".format(id_name))
-            aki = DANE.get_authority_key_id_from_certificate(id_cert)
-            ca_certificate = self.get_dyn_asset(ca_certificate_name)
-            requests_mock.get("https://device.example.net/.well-known/ca/{}.pem".format(aki), 
-                              content=ca_certificate)
-            retrieved = DANE.get_ca_certificate_for_identity(id_name, id_cert)
-            assert retrieved == ca_certificate
+            intermediate_certificate = self.get_dyn_asset(ca_intermediate_cert_name)
+            root_certificate = self.get_dyn_asset(ca_root_cert_name)
+            intermediate_ski = DANE.get_authority_key_id_from_certificate(id_cert)
+            root_ski = DANE.get_authority_key_id_from_certificate(intermediate_certificate)
+            requests_mock.get("https://device.example.net/.well-known/ca/{}.pem".format(intermediate_ski), 
+                              content=intermediate_certificate)
+            requests_mock.get("https://device.example.net/.well-known/ca/{}.pem".format(root_ski), 
+                              content=root_certificate)
+            retrieved = DANE.get_ca_certificates_for_identity(id_name, id_cert)
+            assert len(retrieved) == 2
     
     def test_integration_dane_authenticate_tlsa_pkix_cd(self, requests_mock):
         """Test successful authentication of pkix-cd."""
         for id_name in identity_names:
-            entity_certificate = self.get_dyn_asset("{}.cert.pem".format(id_name))
-            aki = DANE.get_authority_key_id_from_certificate(entity_certificate)
+            entity_cert_contents = self.get_dyn_asset("{}.cert.pem".format(id_name))
+            entity_certificate = DANE.build_x509_object(entity_cert_contents).public_bytes(encoding=serialization.Encoding.PEM)
+            intermediate_certificate = self.get_dyn_asset(ca_intermediate_cert_name)
+            root_certificate = self.get_dyn_asset(ca_root_cert_name)
+            intermediate_ski = DANE.get_authority_key_id_from_certificate(entity_certificate)
+            root_ski = DANE.get_authority_key_id_from_certificate(intermediate_certificate)
+            requests_mock.get("https://device.example.net/.well-known/ca/{}.pem".format(intermediate_ski), 
+                              content=intermediate_certificate)
+            requests_mock.get("https://device.example.net/.well-known/ca/{}.pem".format(root_ski), 
+                              content=root_certificate)
             x509_obj = DANE.build_x509_object(entity_certificate)
-            ca_certificate = self.get_dyn_asset("ca.example.net.cert.pem")
-            requests_mock.get("https://device.example.net/.well-known/ca/{}.pem".format(aki), 
-                              content=ca_certificate)
             cert_bytes = x509_obj.public_bytes(encoding=serialization.Encoding.DER)
             certificate_association = binascii.hexlify(cert_bytes).decode()
             tlsa_record = {"certificate_usage": 4, "selector": 0, "matching_type": 0, 
                            "certificate_association": certificate_association}
             tlsa_record["dnssec"] = False
-            assert DANE.authenticate_tlsa(id_name, tlsa_record) is None
+            pprint.pprint(intermediate_certificate)
+            pprint.pprint(root_certificate)
+            result = DANE.authenticate_tlsa(id_name, tlsa_record)
+            assert result is None
 
     def test_integration_dane_authenticate_tlsa_pkix_cd_fail(self, requests_mock):
         """Test failed authentication of pkix-cd."""
@@ -353,7 +368,7 @@ class TestIntegrationDane:
         """Test matching the AKI of a cert to the SKI of its signing CA."""
         for id_name in identity_names:
             ee_cert = self.get_dyn_asset("{}.cert.pem".format(id_name))
-            ca_cert = self.get_dyn_asset("ca.example.net.cert.pem")
+            ca_cert = self.get_dyn_asset(ca_intermediate_cert_name)
             ee_aki = DANE.get_authority_key_id_from_certificate(ee_cert)
             ca_ski = DANE.get_subject_key_id_from_certificate(ca_cert)
             assert ee_aki == ca_ski

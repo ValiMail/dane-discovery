@@ -71,7 +71,7 @@ jobs:
       - run:
           name: Install deps and run unit and integration tests
           command: |
-            python3 -m py.test --cov=dane_discovery --cov-report=xml --cov-report=term-missing
+            python3 -m py.test --cov=dane_discovery --cov-report=xml --cov-report=term-missing -v
   
   build_and_test_with_coverage:
     docker:
