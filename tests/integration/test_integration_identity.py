@@ -5,6 +5,7 @@ from cryptography.hazmat.primitives import serialization
 
 import pytest
 # import requests_mock
+from unittest.mock import MagicMock
 
 from dane_discovery.dane import DANE
 from dane_discovery.identity import Identity
@@ -173,9 +174,11 @@ class TestIntegrationIdentity:
         root_certificate = self.get_dyn_asset(ca_root_cert_name)
         intermediate_ski = DANE.get_authority_key_id_from_certificate(certificate)
         root_ski = DANE.get_authority_key_id_from_certificate(intermediate_certificate)
-        requests_mock.get("https://device.example.net/.well-known/ca/{}.pem".format(intermediate_ski), 
+        mock_dane = DANE
+        mock_dane.get_a_record = MagicMock(return_value="192.168.1.1")
+        requests_mock.get("https://192.168.1.1/.well-known/ca/{}.pem".format(intermediate_ski), 
                               content=intermediate_certificate)
-        requests_mock.get("https://device.example.net/.well-known/ca/{}.pem".format(root_ski), 
+        requests_mock.get("https://192.168.1.1/.well-known/ca/{}.pem".format(root_ski), 
                               content=root_certificate)
         chain = identity.get_pkix_cd_trust_chain(certificate)
         assert chain[0] == DANE.build_x509_object(certificate).public_bytes(serialization.Encoding.PEM)

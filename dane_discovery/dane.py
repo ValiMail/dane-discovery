@@ -4,9 +4,12 @@ import hashlib
 import re
 import requests
 import urllib
+from urllib.parse import urlparse
+from urllib.parse import urlunparse
 
 import dns.resolver
 import dns.dnssec
+from dns.resolver import Resolver
 from cryptography import x509
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization
@@ -134,7 +137,7 @@ class DANE:
         return hash
 
     @classmethod
-    def get_first_leaf_certificate(cls, dnsname):
+    def get_first_leaf_certificate(cls, dnsname, nsaddr=None):
         """Return the first leaf certificate from TLSA records at ``dnsname``.
 
         This method essentially wraps
@@ -144,13 +147,14 @@ class DANE:
 
         Args:
             dnsname (str): DNS name to query for certificate.
+            nsaddr (str): Override system resolver.
 
         Return:
             dict: Dictionary with keys for ``certificate_usage``, ``selector``,
                 ``matching_type``, ``certificate_association``.
                 If no leaf certificate is found, None is returned.
         """
-        all_tlsa_records = cls.get_tlsa_records(dnsname)
+        all_tlsa_records = cls.get_tlsa_records(dnsname, nsaddr=nsaddr)
         for tlsa in all_tlsa_records:
             if (tlsa["certificate_usage"] in [1, 3, 4]
                     and tlsa["matching_type"] == 0):
@@ -201,6 +205,7 @@ class DANE:
         Args:
             dnsname (str): DNS name for query.
             rr_type (str): RR type to query. Defaults to TLSA.
+            nsaddr (str): Nameserver override address.
 
         Return:
             dict: Keys are ``responses`` (list of string),
@@ -227,6 +232,22 @@ class DANE:
         query_details["responses"] = [a.to_text() for a in answer 
                                       if rr_type in a.to_text().split(" ")[3]]
         return query_details
+
+    @classmethod
+    def get_a_record(cls, dnsname, nsaddr=None):
+        """Get the first A record."""
+        resolver = Resolver()
+        if nsaddr:
+            resolver.nameservers = [nsaddr]
+        try:
+            canonical_name = resolver.canonical_name(dnsname)
+            ip_address = str(resolver.resolve(canonical_name, "A")[0])
+        except dns.exception.DNSException as err:
+            msg = "Caught error '{}' when retrieving A record.".format(err)
+            raise TLSAError(msg)
+        except IndexError:
+            raise TLSAError("No A records for {}".format(dnsname))
+        return ip_address
 
     @classmethod
     def certificate_association_to_der(cls, certificate_association):
@@ -328,7 +349,7 @@ class DANE:
             raise TLSAError(msg)
 
     @classmethod
-    def authenticate_tlsa(cls, dns_name, record):
+    def authenticate_tlsa(cls, dns_name, record, nsaddr=None):
         """Return None if the identity is authenticated, or raise ValueError.
 
         This method authenticates a TLSA record as follows:
@@ -357,6 +378,7 @@ class DANE:
             record (dict): Keys for ``certificate_usage``, ``selector``, 
                 ``matching_type``, ``certificate_association``, 
                 and ``dnssec``.
+            nsaddr (str): Name server override.
         
         Return:
             None if this identity can be cryptographically authenticated.
@@ -383,7 +405,7 @@ class DANE:
         id_cert = cls.der_to_pem(certificate_der)
         try:
             # print("Load CA cert")
-            ca_certs = cls.get_ca_certificates_for_identity(dns_name, id_cert)
+            ca_certs = cls.get_ca_certificates_for_identity(dns_name, id_cert, nsaddr=nsaddr)
             # print("Test cert sig.")
             pkix_valid, reason = cls.validate_certificate_chain(id_cert, ca_certs)
             if not pkix_valid:
@@ -611,7 +633,7 @@ class DANE:
         return cls.format_keyid(skid_hex)
 
     @classmethod
-    def get_ca_certificates_for_identity(cls, identity_name, certificate, max_levels=3):
+    def get_ca_certificates_for_identity(cls, identity_name, certificate, max_levels=3, nsaddr=None):
         """Return the CA certificates for verifying identity_name.
         
         Returns the PEM representation of the CA certificates
@@ -639,9 +661,8 @@ class DANE:
             except ValueError:
                 print("ValueError when parsing {}".format(current_cert))
             ca_certificate_url = cls.generate_url_for_ca_certificate(authority_hostname, parent_ski)
-            r = requests.get(ca_certificate_url)
-            presumed_pem = r.content
-            if not r:
+            presumed_pem = cls.wrap_requests(ca_certificate_url, nsaddr=nsaddr)
+            if not presumed_pem:
                 raise ValueError("CA certificate not found at {}".format(ca_certificate_url))
             # The following line raises ValueError if it fails to parse.
             pem = x509.load_pem_x509_certificate(presumed_pem, default_backend()).public_bytes(serialization.Encoding.PEM)
@@ -654,6 +675,17 @@ class DANE:
                 break
         return ca_certs
     
+    @classmethod
+    def wrap_requests(cls, url, nsaddr=None):
+        """Wrap requests for nameserver override."""
+        parsed = urlparse(url)
+        hostname = parsed.hostname
+        ip_address = cls.get_a_record(hostname, nsaddr)
+        parsed = parsed._replace(netloc=ip_address)
+        url = urlunparse(parsed)
+        r = requests.get(url, headers={"Host": hostname})
+        return r.content
+
     @classmethod
     def get_ca_certificate_for_identity(cls, identity_name, certificate):
         """Return the CA certificate for verifying identity_name.

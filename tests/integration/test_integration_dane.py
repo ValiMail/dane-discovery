@@ -301,15 +301,19 @@ class TestIntegrationDane:
             root_certificate = self.get_dyn_asset(ca_root_cert_name)
             intermediate_ski = DANE.get_authority_key_id_from_certificate(id_cert)
             root_ski = DANE.get_authority_key_id_from_certificate(intermediate_certificate)
-            requests_mock.get("https://device.example.net/.well-known/ca/{}.pem".format(intermediate_ski), 
+            mock_dane = DANE
+            mock_dane.get_a_record = MagicMock(return_value="192.168.1.1")
+            requests_mock.get("https://192.168.1.1/.well-known/ca/{}.pem".format(intermediate_ski), 
                               content=intermediate_certificate)
-            requests_mock.get("https://device.example.net/.well-known/ca/{}.pem".format(root_ski), 
+            requests_mock.get("https://192.168.1.1/.well-known/ca/{}.pem".format(root_ski), 
                               content=root_certificate)
             retrieved = DANE.get_ca_certificates_for_identity(id_name, id_cert)
             assert len(retrieved) == 2
     
     def test_integration_dane_authenticate_tlsa_pkix_cd(self, requests_mock):
         """Test successful authentication of pkix-cd."""
+        mock_dane = DANE
+        mock_dane.get_a_record = MagicMock(return_value="192.168.1.1")
         for id_name in identity_names:
             entity_cert_contents = self.get_dyn_asset("{}.cert.pem".format(id_name))
             entity_certificate = DANE.build_x509_object(entity_cert_contents).public_bytes(encoding=serialization.Encoding.PEM)
@@ -317,9 +321,9 @@ class TestIntegrationDane:
             root_certificate = self.get_dyn_asset(ca_root_cert_name)
             intermediate_ski = DANE.get_authority_key_id_from_certificate(entity_certificate)
             root_ski = DANE.get_authority_key_id_from_certificate(intermediate_certificate)
-            requests_mock.get("https://device.example.net/.well-known/ca/{}.pem".format(intermediate_ski), 
+            requests_mock.get("https://192.168.1.1/.well-known/ca/{}.pem".format(intermediate_ski), 
                               content=intermediate_certificate)
-            requests_mock.get("https://device.example.net/.well-known/ca/{}.pem".format(root_ski), 
+            requests_mock.get("https://192.168.1.1/.well-known/ca/{}.pem".format(root_ski), 
                               content=root_certificate)
             x509_obj = DANE.build_x509_object(entity_certificate)
             cert_bytes = x509_obj.public_bytes(encoding=serialization.Encoding.DER)
@@ -334,12 +338,14 @@ class TestIntegrationDane:
 
     def test_integration_dane_authenticate_tlsa_pkix_cd_fail(self, requests_mock):
         """Test failed authentication of pkix-cd."""
+        mock_dane = DANE
+        mock_dane.get_a_record = MagicMock(return_value="192.168.1.1")
         for id_name in identity_names:
             entity_certificate = self.get_dyn_asset("{}.cert.pem".format(id_name))
             aki = DANE.get_authority_key_id_from_certificate(entity_certificate)
             x509_obj = DANE.build_x509_object(entity_certificate)
             ca_certificate = self.get_dyn_asset("{}.cert.pem".format(id_name))
-            requests_mock.get("https://device.example.net/.well-known/ca/{}.pem".format(aki),
+            requests_mock.get("https://192.168.1.1/.well-known/ca/{}.pem".format(aki),
                               content=ca_certificate)
             cert_bytes = x509_obj.public_bytes(encoding=serialization.Encoding.DER)
             certificate_association = binascii.hexlify(cert_bytes).decode()
