@@ -24,12 +24,13 @@ Load a certificate from DNS and print the PEM representation
 .. code-block:: python
 
     from dane_discovery.dane import DANE
+    from dane_discovery.pki import PKI
     dns_name = "dns.name.where.a.cert.tlsa.can.be.found"
     tlsa_record = DANE.get_first_leaf_certificate(dns_name)
     if not tlsa_record:
         raise ValueError("No leaf certificate found for {}.".format(dns_name))
 
-    der_cert = DANE.certificate_association_to_der(tlsa_record["certificate_association"])
+    der_cert = PKI.certificate_association_to_der(tlsa_record["certificate_association"])
     print(DANE.der_to_pem(der_cert))
 
 

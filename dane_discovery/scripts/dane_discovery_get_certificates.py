@@ -2,7 +2,6 @@
 import argparse
 import os
 
-from dane_discovery.dane import DANE
 from dane_discovery.identity import Identity
 
 

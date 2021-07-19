@@ -3,6 +3,7 @@ import argparse
 import os
 
 from dane_discovery.dane import DANE
+from dane_discovery.pki import PKI
 from dane_discovery.identity import Identity
 
 
@@ -36,7 +37,7 @@ def main():
             print("Key Error! Are we able to obtain the root CA certificate? {}".format(err))
             continue
         authority_hostname = DANE.generate_authority_hostname(args.dnsname)
-        ca_cert_skid = DANE.get_subject_key_id_from_certificate(ca_pem)
+        ca_cert_skid = PKI.get_subject_key_id_from_certificate(ca_pem)
         ca_cert_name = "{}-CA-{}".format(authority_hostname, ca_cert_skid.replace("-", ""))
         certs[ca_cert_name] = ca_pem
     # Write out files
