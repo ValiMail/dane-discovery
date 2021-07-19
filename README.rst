@@ -42,24 +42,27 @@ Load a certificate from DNS and print the PEM representation
 .. code-block:: python
 
     from dane_discovery.dane import DANE
+    from dane_discovery.pki import PKI
     dns_name = "dns.name.having.a.tlsa.record"
     tlsa_record = DANE.get_first_leaf_certificate(dns_name)
     if not tlsa_record:
         raise ValueError("No leaf certificate found for {}.".format(dns_name))
 
-    der_cert = DANE.certificate_association_to_der(tlsa_record["certificate_association"])
-    print(DANE.der_to_pem(der_cert))
+    der_cert = PKI.certificate_association_to_der(tlsa_record["certificate_association"])
+    print(PKI.der_to_pem(der_cert))
 
 
-    Load a DANE identity from DNS and print the request context
-    -----------------------------------------------------------
+
+Load a DANE identity from DNS and print the request context
+-----------------------------------------------------------
+
 
 .. code-block:: python
 
     from dane_discovery.identity import Identity
     dns_name = "dns.name.having.a.tlsa.record"
     dane_identity = Identity(dns_name)
-    print(dane_identity)
+    print(dane_identity.report())
 
     Name: abc123.air-quality-sensor._device.example.net
     Request context:

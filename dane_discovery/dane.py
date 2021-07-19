@@ -12,6 +12,7 @@ import dns.dnssec
 from dns.resolver import Resolver
 from cryptography import x509
 from cryptography.hazmat.backends import default_backend
+from forcediphttpsadapter.adapters import ForcedIPHTTPSAdapter
 
 from .exceptions import TLSAError
 from .pki import PKI
@@ -461,9 +462,9 @@ class DANE:
         parsed = urlparse(url)
         hostname = parsed.hostname
         ip_address = cls.get_a_record(hostname, nsaddr)
-        parsed = parsed._replace(netloc=ip_address)
-        url = urlunparse(parsed)
-        r = requests.get(url, headers={"Host": hostname})
+        session = requests.Session()
+        session.mount(url, ForcedIPHTTPSAdapter(dest_ip=ip_address))
+        r = session.get(url, headers={"Host": hostname})
         return r.content
 
     @classmethod

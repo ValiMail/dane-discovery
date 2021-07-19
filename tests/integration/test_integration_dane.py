@@ -313,9 +313,9 @@ class TestIntegrationDane:
             root_ski = PKI.get_authority_key_id_from_certificate(intermediate_certificate)
             mock_dane = DANE
             mock_dane.get_a_record = MagicMock(return_value="192.168.1.1")
-            requests_mock.get("https://192.168.1.1/.well-known/ca/{}.pem".format(intermediate_ski), 
+            requests_mock.get("https://device.example.net/.well-known/ca/{}.pem".format(intermediate_ski), 
                               content=intermediate_certificate)
-            requests_mock.get("https://192.168.1.1/.well-known/ca/{}.pem".format(root_ski), 
+            requests_mock.get("https://device.example.net/.well-known/ca/{}.pem".format(root_ski), 
                               content=root_certificate)
             retrieved = DANE.get_ca_certificates_for_identity(id_name, id_cert)
             assert len(retrieved) == 2
@@ -331,9 +331,9 @@ class TestIntegrationDane:
             root_certificate = self.get_dyn_asset(ca_root_cert_name)
             intermediate_ski = PKI.get_authority_key_id_from_certificate(entity_certificate)
             root_ski = PKI.get_authority_key_id_from_certificate(intermediate_certificate)
-            requests_mock.get("https://192.168.1.1/.well-known/ca/{}.pem".format(intermediate_ski), 
+            requests_mock.get("https://device.example.net/.well-known/ca/{}.pem".format(intermediate_ski), 
                               content=intermediate_certificate)
-            requests_mock.get("https://192.168.1.1/.well-known/ca/{}.pem".format(root_ski), 
+            requests_mock.get("https://device.example.net/.well-known/ca/{}.pem".format(root_ski), 
                               content=root_certificate)
             x509_obj = PKI.build_x509_object(entity_certificate)
             cert_bytes = x509_obj.public_bytes(encoding=serialization.Encoding.DER)
@@ -355,7 +355,7 @@ class TestIntegrationDane:
             aki = PKI.get_authority_key_id_from_certificate(entity_certificate)
             x509_obj = PKI.build_x509_object(entity_certificate)
             ca_certificate = self.get_dyn_asset("{}.cert.pem".format(id_name))
-            requests_mock.get("https://192.168.1.1/.well-known/ca/{}.pem".format(aki),
+            requests_mock.get("https://device.example.net/.well-known/ca/{}.pem".format(aki),
                               content=ca_certificate)
             cert_bytes = x509_obj.public_bytes(encoding=serialization.Encoding.DER)
             certificate_association = binascii.hexlify(cert_bytes).decode()

@@ -134,9 +134,9 @@ class TestIntegrationIdentity:
         root_ski = PKI.get_authority_key_id_from_certificate(intermediate_certificate)
         mock_dane = DANE
         mock_dane.get_a_record = MagicMock(return_value="192.168.1.1")
-        requests_mock.get("https://192.168.1.1/.well-known/ca/{}.pem".format(intermediate_ski), 
+        requests_mock.get("https://device.example.net/.well-known/ca/{}.pem".format(intermediate_ski), 
                               content=intermediate_certificate)
-        requests_mock.get("https://192.168.1.1/.well-known/ca/{}.pem".format(root_ski), 
+        requests_mock.get("https://device.example.net/.well-known/ca/{}.pem".format(root_ski), 
                               content=root_certificate)
         assert identity.validate_certificate(certificate)
     
@@ -158,9 +158,9 @@ class TestIntegrationIdentity:
         root_ski = PKI.get_authority_key_id_from_certificate(intermediate_certificate)
         mock_dane = DANE
         mock_dane.get_a_record = MagicMock(return_value="192.168.1.1")
-        requests_mock.get("https://192.168.1.1/.well-known/ca/{}.pem".format(intermediate_ski), 
+        requests_mock.get("https://device.example.net/.well-known/ca/{}.pem".format(intermediate_ski), 
                               content=intermediate_certificate)
-        requests_mock.get("https://192.168.1.1/.well-known/ca/{}.pem".format(root_ski), 
+        requests_mock.get("https://device.example.net/.well-known/ca/{}.pem".format(root_ski), 
                               content=root_certificate)
         assert identity.validate_certificate(certificate)
 
@@ -186,9 +186,9 @@ class TestIntegrationIdentity:
         print("Entity cert SKI: {}".format(entity_ski))
         mock_dane = DANE
         mock_dane.get_a_record = MagicMock(return_value="192.168.1.1")
-        requests_mock.get("https://192.168.1.1/.well-known/ca/{}.pem".format(intermediate_ski), 
+        requests_mock.get("https://device.example.net/.well-known/ca/{}.pem".format(intermediate_ski), 
                               content=intermediate_certificate)
-        requests_mock.get("https://192.168.1.1/.well-known/ca/{}.pem".format(root_ski), 
+        requests_mock.get("https://device.example.net/.well-known/ca/{}.pem".format(root_ski), 
                               content=root_certificate)
         chain = identity.get_pkix_cd_trust_chain(certificate, 100)
         assert chain[0] == PKI.build_x509_object(certificate).public_bytes(serialization.Encoding.PEM)
@@ -214,9 +214,9 @@ class TestIntegrationIdentity:
         root_ski = PKI.get_authority_key_id_from_certificate(intermediate_certificate)
         mock_dane = DANE
         mock_dane.get_a_record = MagicMock(return_value="192.168.1.1")
-        requests_mock.get("https://192.168.1.1/.well-known/ca/{}.pem".format(intermediate_ski), 
+        requests_mock.get("https://device.example.net/.well-known/ca/{}.pem".format(intermediate_ski), 
                               content=intermediate_certificate)
-        requests_mock.get("https://192.168.1.1/.well-known/ca/{}.pem".format(root_ski), 
+        requests_mock.get("https://device.example.net/.well-known/ca/{}.pem".format(root_ski), 
                               content=certificate)
         valid, _reason = identity.validate_certificate(certificate)
         assert not valid
@@ -239,7 +239,7 @@ class TestIntegrationIdentity:
         ca_certificate = self.get_dyn_asset(certificate_path)
         mock_dane = DANE
         mock_dane.get_a_record = MagicMock(return_value="192.168.1.1")
-        requests_mock.get("https://192.168.1.1/.well-known/ca/{}.pem".format(aki), 
+        requests_mock.get("https://device.example.net/.well-known/ca/{}.pem".format(aki), 
                           content=ca_certificate)
         valid, _reason = identity.validate_certificate(certificate)
         assert not valid
@@ -267,9 +267,9 @@ class TestIntegrationIdentity:
         root_ski = PKI.get_authority_key_id_from_certificate(intermediate_certificate)
         mock_dane = DANE
         mock_dane.get_a_record = MagicMock(return_value="192.168.1.1")
-        requests_mock.get("https://192.168.1.1/.well-known/ca/{}.pem".format(intermediate_ski), 
+        requests_mock.get("https://device.example.net/.well-known/ca/{}.pem".format(intermediate_ski), 
                               content=intermediate_certificate)
-        requests_mock.get("https://192.168.1.1/.well-known/ca/{}.pem".format(root_ski), 
+        requests_mock.get("https://device.example.net/.well-known/ca/{}.pem".format(root_ski), 
                               content=root_certificate)
         certs = identity.get_all_certificates()
         pprint.pprint(certs)
