@@ -14,6 +14,7 @@ Contents:
    getting_started
    object_dane
    object_identity
+   object_pki
    license
    changelog
 

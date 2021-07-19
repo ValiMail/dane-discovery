@@ -1,33 +1,15 @@
 """Identity abstraction."""
 import pprint
-import urllib
 
-from cryptography import x509
 from cryptography.hazmat.primitives import serialization
-from cryptography.hazmat.backends import default_backend
-from cryptography.hazmat.primitives.asymmetric import padding
-from cryptography.exceptions import InvalidSignature
 
 from .dane import DANE
+from .pki import PKI
 from .exceptions import TLSAError
 
 
 class Identity:
     """Represent a DANE identity."""
-
-    descr = {"certificate_usage":
-             {0: "CA Constraint",
-              1: "PKIX-EE",
-              2: "DANE-TA",
-              3: "DANE-EE",
-              4: "PKIX-CD"},
-             "selector":
-             {0: "Full certificate match",
-              1: "Public key match"},
-             "matching_type":
-             {0: "Exact match against certificate association",
-              1: "Match the SHA-256 hash of the selected content",
-              2: "Match the SHA-512 hash of the selected content"}}
 
     def __init__(self, dnsname, private_key=None, resolver_override=None):
         """Initialize with the DNS name.
@@ -44,13 +26,13 @@ class Identity:
         self.dnssec = False
         self.tls = False
         self.tcp = False
-        self.private_key = self.load_private_key(private_key)
+        self.private_key = PKI.load_private_key(private_key)
         self.resolver_override = resolver_override
         self.dane_credentials = []
         self.set_dane_credentials(self.dnsname)
 
     def validate_certificate(self, certificate):
-        """Validate certificate against DANE identity records in DNS.
+        """Return True, None if the certificate is valid for the identity.
         
         This method returns two values, success and status.
 
@@ -64,7 +46,7 @@ class Identity:
             bool: True if successful, False if validation fails.
             str: Status indicating why validation passed or failed.
         """
-        cert_obj = DANE.build_x509_object(certificate)
+        cert_obj = PKI.build_x509_object(certificate)
         why_not = []
         default = "Unable to find a TLSA record with certificate usage 4."
         # For each TLSA certificate, attempt to validate local cert.
@@ -100,6 +82,7 @@ class Identity:
         # Check TLSA records for wrong selector and matching type.
         selector = credential["tlsa_parsed"]["selector"]
         matching_type = credential["tlsa_parsed"]["matching_type"]
+        cert_association = credential["tlsa_parsed"]["certificate_association"]
         if selector != 0:
             why_not.append("Selector set to {}.".format(selector))
         if matching_type != 0:
@@ -108,22 +91,21 @@ class Identity:
             return False, "\n".join(why_not)
         # Check to see that the DER matches what's in DNS
         cert_der = cert_obj.public_bytes(encoding=serialization.Encoding.DER)
-        cert_association = credential["tlsa_parsed"]["certificate_association"]
-        tlsa_der = DANE.certificate_association_to_der(cert_association)
+        tlsa_der = PKI.certificate_association_to_der(cert_association)
         if not cert_der == tlsa_der:
             return False, "Certificate and TLSA certificate association do not match."
         # Get the CA certificate
         try:
-            ca_pems = DANE.get_ca_certificates_for_identity(self.dnsname, cert_der, self.resolver_override)
+            ca_pems = DANE.get_ca_certificates_for_identity(self.dnsname, cert_der, 100, self.resolver_override)
         except ValueError as err:
             return False, str(err)
         cert_pem = cert_obj.public_bytes(serialization.Encoding.PEM)
-        validated, reason = DANE.validate_certificate_chain(cert_pem, ca_pems)
+        validated, reason = PKI.validate_certificate_chain(cert_pem, ca_pems)
         if not validated:
             return False, "Validation against CA certificate failed: {}.".format(reason)
         return True, "Format and authority CA signature verified."
 
-    def get_pkix_cd_trust_chain(self, certificate, max_levels=3):
+    def get_pkix_cd_trust_chain(self, certificate, max_levels=100):
         """Return a dictionary with entire discovered trust chain.
         
         Args:
@@ -134,14 +116,16 @@ class Identity:
             dict: Dictionary with integer keys for entity cert (``0``) and intermediate CA certificates.
                 The root certificate key is ``root``.
         """
-        certificate = DANE.build_x509_object(certificate).public_bytes(serialization.Encoding.PEM)
+        certificate = PKI.build_x509_object(certificate).public_bytes(serialization.Encoding.PEM)
         retval = {0: certificate}
         next_level = 1
         ca_certificates = DANE.get_ca_certificates_for_identity(self.dnsname, certificate, max_levels, self.resolver_override)
-        DANE.validate_certificate_chain(certificate, ca_certificates)
+        chain_valid, reason = PKI.validate_certificate_chain(certificate, ca_certificates)
+        if not chain_valid:
+            raise ValueError(reason)
         for cert in ca_certificates:
-            aki = DANE.get_authority_key_id_from_certificate(cert)
-            ski = DANE.get_subject_key_id_from_certificate(cert)
+            aki = PKI.get_authority_key_id_from_certificate(cert)
+            ski = PKI.get_subject_key_id_from_certificate(cert)
             if aki == ski:
                 # The root cert is the last, so we break here.
                 retval["root"] = cert
@@ -169,7 +153,6 @@ class Identity:
             cryptography.x509.Certificate: Certificate object as parsed 
                 from TLSA record.
         """
-        supported_certificate_types = {"PKIX-EE": 1, "DANE-EE": 3, "PKIX-CD": 4}
         target = ""
         # Find a matching credential
         for cred in self.dane_credentials:
@@ -276,102 +259,6 @@ class Identity:
             fmt += "\n"
         return fmt
 
-    @classmethod
-    def get_cert_meta(cls, cert_der):
-        """Return a dictionary containing certificate metadata."""
-        retval = {"subject": {}, "extensions": {}}
-        x509_obj = DANE.build_x509_object(cert_der)
-        for item in x509_obj.subject:
-            retval["subject"][item.oid._name] = item.value
-        for extension in x509_obj.extensions:
-            xtn = cls.parse_extension(extension)
-            xtn_name = [x for x in xtn.keys()][0]
-            retval["extensions"][xtn_name] = xtn[xtn_name]
-        return retval
-
-    @classmethod
-    def parse_extension(cls, x509_ext):
-        """Return a dictionary representation of the x509 extension."""
-        usage = ["content_commitment", "crl_sign", "data_encipherment",
-                 "digital_signature", "key_agreement", "key_cert_sign",
-                 "key_encipherment"]
-        oidname = x509_ext.oid._name
-        if oidname == "basicConstraints":
-            return {"BasicConstraints": {"ca": x509_ext.value.ca,
-                                        "path_length":
-                                        x509_ext.value.path_length}}
-        elif oidname == "extendedKeyUsage":
-            return {"ExtendedKeyUsage": [oid._name for oid
-                                         in x509_ext.value]}
-        elif oidname == "subjectAltName":
-            return {"SubjectAltName": [oid.value for oid in x509_ext.value]}
-        elif oidname == "keyUsage":
-            return {"KeyUsage": {x: getattr(x509_ext.value, x) for x in usage}}
-        return {x509_ext.oid._name: x509_ext.value}
-
-    @classmethod
-    def load_private_key(cls, private_key):
-        """Return a private key.
-
-        Wraps cryptography.hazmat.primitives.serialization.load_pem_private_key
-        and returns the appropriate type.
-
-        Args:
-            private_key (str): Private key in PEM format.
-
-        Return:
-            Private key object, or None if ``private_key`` arg is None.
-
-        Raise:
-            ValueError if there's an error loading the key.
-        """
-        if private_key is None:
-            return None
-        return serialization.load_pem_private_key(private_key, password=None)
-
-    @classmethod
-    def process_tlsa(cls, tlsa_record):
-        """Return a dictionary describing the TLSA record's contents.
-
-        Args:
-            tlsa_record (dict): Dictionary describing TLSA record contents.
-
-        Dictionary keys:
-
-            ``tlsa_fields``: TLSA record parsed into a list.
-        
-            ``tlsa_parsed``: A dictionary of parsed TLSA record fields.
-        
-            ``certificate_usage``: Text description of the TLSA field.
-        
-            ``matching_type``: Text description of the TLSA field.
-        
-            ``selector``: Text description of the TLSA field.
-        
-            ``certificate_metadata``: Metadata parsed from the certificate.
-        
-            ``public_key_object``: If the TLSA record contains a public key,
-            this will be the same object as generated by
-            cryptography.hazmat.primitives.serialization.load_der_public_key()
-        
-            ``certificate_object``: If the TLSA record contains a certificate,
-            this will be a cryptography.x509.Certificate object.
-        """
-        tlsa_fields = ["certificate_usage", "selector",
-                       "matching_type", "certificate_association"]
-        cert_association = tlsa_record["certificate_association"]
-        cert_der = DANE.certificate_association_to_der(cert_association)
-        retval = {"certificate_metadata": None, "public_key_object": None}
-        retval["tlsa_fields"] = [tlsa_record[x] for x in tlsa_fields]
-        retval["tlsa_parsed"] = tlsa_record.copy()
-        for target in ["certificate_usage", "matching_type", "selector"]:
-            retval[target] = cls.descr[target][int(tlsa_record[target])]
-        if tlsa_record["matching_type"] == 0:
-            retval["certificate_metadata"] = cls.get_cert_meta(cert_der)
-            retval["certificate_object"] = DANE.build_x509_object(cert_der)
-            retval["public_key_object"] = retval["certificate_object"].public_key()
-        return retval
-
     def get_all_certificates(self, filters=[]):
         """Return a dictionary of all EE certificates for this identity.
 
@@ -445,7 +332,7 @@ class Identity:
         request_context_fields = ["dnssec", "tcp", "tls"]
         for field in request_context_fields:
             setattr(self, field, tlsa_records[0][field])
-        self.dane_credentials = [self.process_tlsa(record) for record
+        self.dane_credentials = [DANE.process_tlsa(record) for record
                                  in tlsa_records]
 
     

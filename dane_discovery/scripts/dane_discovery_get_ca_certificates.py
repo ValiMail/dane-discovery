@@ -1,7 +1,6 @@
 """Download all PKIX-CD CA certificates for an identity."""
 import argparse
 import os
-import sys
 
 from dane_discovery.dane import DANE
 from dane_discovery.identity import Identity
@@ -28,13 +27,13 @@ def main():
     certs = {}
     for _, ee_cert_pem in ee_certs.items():
         try:
-            ca_pem = DANE.get_ca_certificate_for_identity(args.dnsname, ee_cert_pem)
+            identity = Identity(args.dnsname)
+            ca_pem = identity.get_pkix_cd_trust_chain(ee_cert_pem)["root"]
         except ValueError as err:
             print(err)
             continue
-        ca_validation = DANE.verify_certificate_signature(ee_cert_pem, ca_pem)
-        if not ca_validation:
-            print("WARN: Validation against CA certificate failed!")
+        except KeyError as err:
+            print("Key Error! Are we able to obtain the root CA certificate? {}".format(err))
             continue
         authority_hostname = DANE.generate_authority_hostname(args.dnsname)
         ca_cert_skid = DANE.get_subject_key_id_from_certificate(ca_pem)

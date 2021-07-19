@@ -6,12 +6,14 @@ from cryptography.hazmat.primitives import serialization
 import pytest
 # import requests_mock
 from unittest.mock import MagicMock
+from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
+from cryptography.hazmat.primitives.asymmetric.ec import EllipticCurvePrivateKey
 
 from dane_discovery.dane import DANE
 from dane_discovery.identity import Identity
+from dane_discovery.pki import PKI
 from dane_discovery.exceptions import TLSAError
-from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
-from cryptography.hazmat.primitives.asymmetric.ec import EllipticCurvePrivateKey
+
 
 
 here_dir = os.path.dirname(os.path.abspath(__file__))
@@ -49,7 +51,7 @@ class TestIntegrationIdentity:
         for identity_name in identity_names:
             identity = Identity(identity_name)
             tlsa_dict = DANE.process_response(self.tlsa_for_cert(identity_name))
-            identity.dane_credentials = [identity.process_tlsa(record) for record
+            identity.dane_credentials = [DANE.process_tlsa(record) for record
                                          in [tlsa_dict]]
             identity.dnssec = True
             print(dir(identity))
@@ -63,7 +65,7 @@ class TestIntegrationIdentity:
         """Test loading a private key from PEM data."""
         for identity_name in identity_names:
             key_pem = self.get_dyn_asset("{}.key.pem".format(identity_name))
-            key_obj = Identity.load_private_key(key_pem)
+            key_obj = PKI.load_private_key(key_pem)
             assert isinstance(key_obj, RSAPrivateKey) or isinstance(key_obj, EllipticCurvePrivateKey)
 
     def test_integration_identity_get_entity_certificate_by_type_fail(self, requests_mock):
@@ -71,7 +73,7 @@ class TestIntegrationIdentity:
         for identity_name in identity_names:
             identity = Identity(identity_name)
             tlsa_dict = DANE.process_response(self.tlsa_for_cert(identity_name))
-            identity.dane_credentials = [identity.process_tlsa(record) for record
+            identity.dane_credentials = [DANE.process_tlsa(record) for record
                                          in [tlsa_dict]]
             identity.dnssec = False
             identity.tls = True
@@ -87,7 +89,7 @@ class TestIntegrationIdentity:
             print("Identity: {}".format(identity_name))
             tlsa_dict = DANE.process_response(self.tlsa_for_cert(identity_name))
             print("TLSA: {}".format(tlsa_dict))
-            identity.dane_credentials = [identity.process_tlsa(record) for record
+            identity.dane_credentials = [DANE.process_tlsa(record) for record
                                          in [tlsa_dict]]
             identity.dnssec = True
             identity.tls = True
@@ -107,7 +109,7 @@ class TestIntegrationIdentity:
             print("Identity: {}".format(identity_name))
             tlsa_dict = DANE.process_response(self.tlsa_for_cert(identity_name))
             print("TLSA: {}".format(tlsa_dict))
-            identity.dane_credentials = [identity.process_tlsa(record) for record
+            identity.dane_credentials = [DANE.process_tlsa(record) for record
                                          in [tlsa_dict]]
             identity.dnssec = True
             identity.tls = True
@@ -122,17 +124,19 @@ class TestIntegrationIdentity:
         certificate = self.get_dyn_asset(certificate_path)
         identity = Identity(identity_name)
         tlsa_dict = DANE.process_response(self.tlsa_for_cert(identity_name, 4, 0, 0))
-        identity.dane_credentials = [identity.process_tlsa(record) for record
+        identity.dane_credentials = [DANE.process_tlsa(record) for record
                                      in [tlsa_dict]]
         identity.tls = True
         identity.tcp = True
         intermediate_certificate = self.get_dyn_asset(ca_intermediate_cert_name)
         root_certificate = self.get_dyn_asset(ca_root_cert_name)
-        intermediate_ski = DANE.get_authority_key_id_from_certificate(certificate)
-        root_ski = DANE.get_authority_key_id_from_certificate(intermediate_certificate)
-        requests_mock.get("https://device.example.net/.well-known/ca/{}.pem".format(intermediate_ski), 
+        intermediate_ski = PKI.get_authority_key_id_from_certificate(certificate)
+        root_ski = PKI.get_authority_key_id_from_certificate(intermediate_certificate)
+        mock_dane = DANE
+        mock_dane.get_a_record = MagicMock(return_value="192.168.1.1")
+        requests_mock.get("https://192.168.1.1/.well-known/ca/{}.pem".format(intermediate_ski), 
                               content=intermediate_certificate)
-        requests_mock.get("https://device.example.net/.well-known/ca/{}.pem".format(root_ski), 
+        requests_mock.get("https://192.168.1.1/.well-known/ca/{}.pem".format(root_ski), 
                               content=root_certificate)
         assert identity.validate_certificate(certificate)
     
@@ -143,18 +147,20 @@ class TestIntegrationIdentity:
         certificate = self.get_dyn_asset(certificate_path)
         identity = Identity(identity_name)
         tlsa_dict = DANE.process_response(self.tlsa_for_cert(identity_name, 4, 0, 0))
-        identity.dane_credentials = [identity.process_tlsa(record) for record
+        identity.dane_credentials = [DANE.process_tlsa(record) for record
                                      in [tlsa_dict]]
         identity.tls = True
         identity.tcp = True
         identity.dnssec = True
         intermediate_certificate = self.get_dyn_asset(ca_intermediate_cert_name)
         root_certificate = self.get_dyn_asset(ca_root_cert_name)
-        intermediate_ski = DANE.get_authority_key_id_from_certificate(certificate)
-        root_ski = DANE.get_authority_key_id_from_certificate(intermediate_certificate)
-        requests_mock.get("https://device.example.net/.well-known/ca/{}.pem".format(intermediate_ski), 
+        intermediate_ski = PKI.get_authority_key_id_from_certificate(certificate)
+        root_ski = PKI.get_authority_key_id_from_certificate(intermediate_certificate)
+        mock_dane = DANE
+        mock_dane.get_a_record = MagicMock(return_value="192.168.1.1")
+        requests_mock.get("https://192.168.1.1/.well-known/ca/{}.pem".format(intermediate_ski), 
                               content=intermediate_certificate)
-        requests_mock.get("https://device.example.net/.well-known/ca/{}.pem".format(root_ski), 
+        requests_mock.get("https://192.168.1.1/.well-known/ca/{}.pem".format(root_ski), 
                               content=root_certificate)
         assert identity.validate_certificate(certificate)
 
@@ -165,25 +171,29 @@ class TestIntegrationIdentity:
         certificate = self.get_dyn_asset(certificate_path)
         identity = Identity(identity_name)
         tlsa_dict = DANE.process_response(self.tlsa_for_cert(identity_name, 4, 0, 0))
-        identity.dane_credentials = [identity.process_tlsa(record) for record
+        identity.dane_credentials = [DANE.process_tlsa(record) for record
                                      in [tlsa_dict]]
         identity.tls = True
         identity.tcp = True
-        identity.dnssec = True
+        identity.dnssec = False
         intermediate_certificate = self.get_dyn_asset(ca_intermediate_cert_name)
         root_certificate = self.get_dyn_asset(ca_root_cert_name)
-        intermediate_ski = DANE.get_authority_key_id_from_certificate(certificate)
-        root_ski = DANE.get_authority_key_id_from_certificate(intermediate_certificate)
+        intermediate_ski = PKI.get_subject_key_id_from_certificate(intermediate_certificate)
+        root_ski = PKI.get_subject_key_id_from_certificate(root_certificate)
+        entity_ski = PKI.get_subject_key_id_from_certificate(certificate)
+        print("Root cert SKI: {}".format(root_ski))
+        print("Intermediate cert SKI: {}".format(intermediate_ski))
+        print("Entity cert SKI: {}".format(entity_ski))
         mock_dane = DANE
         mock_dane.get_a_record = MagicMock(return_value="192.168.1.1")
         requests_mock.get("https://192.168.1.1/.well-known/ca/{}.pem".format(intermediate_ski), 
                               content=intermediate_certificate)
         requests_mock.get("https://192.168.1.1/.well-known/ca/{}.pem".format(root_ski), 
                               content=root_certificate)
-        chain = identity.get_pkix_cd_trust_chain(certificate)
-        assert chain[0] == DANE.build_x509_object(certificate).public_bytes(serialization.Encoding.PEM)
-        assert chain[1] == DANE.build_x509_object(intermediate_certificate).public_bytes(serialization.Encoding.PEM)
-        assert chain["root"] == DANE.build_x509_object(root_certificate).public_bytes(serialization.Encoding.PEM)
+        chain = identity.get_pkix_cd_trust_chain(certificate, 100)
+        assert chain[0] == PKI.build_x509_object(certificate).public_bytes(serialization.Encoding.PEM)
+        assert chain[1] == PKI.build_x509_object(intermediate_certificate).public_bytes(serialization.Encoding.PEM)
+        assert chain["root"] == PKI.build_x509_object(root_certificate).public_bytes(serialization.Encoding.PEM)
 
     def test_integration_identity_validate_certificate_pkix_cd_fail(self, requests_mock):
         """Test validating a local certificate when certificate_usage is 4.
@@ -194,17 +204,19 @@ class TestIntegrationIdentity:
         certificate = self.get_dyn_asset(certificate_path)
         identity = Identity(identity_name)
         tlsa_dict = DANE.process_response(self.tlsa_for_cert(identity_name, 4, 0, 0))
-        identity.dane_credentials = [identity.process_tlsa(record) for record
+        identity.dane_credentials = [DANE.process_tlsa(record) for record
                                      in [tlsa_dict]]
         identity.tls = True
         identity.tcp = True
         intermediate_certificate = self.get_dyn_asset(ca_intermediate_cert_name)
         root_certificate = self.get_dyn_asset(ca_root_cert_name)
-        intermediate_ski = DANE.get_authority_key_id_from_certificate(certificate)
-        root_ski = DANE.get_authority_key_id_from_certificate(intermediate_certificate)
-        requests_mock.get("https://device.example.net/.well-known/ca/{}.pem".format(intermediate_ski), 
+        intermediate_ski = PKI.get_authority_key_id_from_certificate(certificate)
+        root_ski = PKI.get_authority_key_id_from_certificate(intermediate_certificate)
+        mock_dane = DANE
+        mock_dane.get_a_record = MagicMock(return_value="192.168.1.1")
+        requests_mock.get("https://192.168.1.1/.well-known/ca/{}.pem".format(intermediate_ski), 
                               content=intermediate_certificate)
-        requests_mock.get("https://device.example.net/.well-known/ca/{}.pem".format(root_ski), 
+        requests_mock.get("https://192.168.1.1/.well-known/ca/{}.pem".format(root_ski), 
                               content=certificate)
         valid, _reason = identity.validate_certificate(certificate)
         assert not valid
@@ -218,14 +230,16 @@ class TestIntegrationIdentity:
         certificate = self.get_dyn_asset(certificate_path)
         identity = Identity(identity_name)
         tlsa_dict = DANE.process_response(self.tlsa_for_cert(identity_name, 4, 0, 0))
-        identity.dane_credentials = [identity.process_tlsa(record) for record
+        identity.dane_credentials = [DANE.process_tlsa(record) for record
                                      in [tlsa_dict]]
         identity.tls = True
         identity.tcp = True
         identity.dnssec = True
-        aki = DANE.get_authority_key_id_from_certificate(certificate)
+        aki = PKI.get_authority_key_id_from_certificate(certificate)
         ca_certificate = self.get_dyn_asset(certificate_path)
-        requests_mock.get("https://device.example.net/.well-known/ca/{}.pem".format(aki), 
+        mock_dane = DANE
+        mock_dane.get_a_record = MagicMock(return_value="192.168.1.1")
+        requests_mock.get("https://192.168.1.1/.well-known/ca/{}.pem".format(aki), 
                           content=ca_certificate)
         valid, _reason = identity.validate_certificate(certificate)
         assert not valid
@@ -237,9 +251,9 @@ class TestIntegrationIdentity:
         identity = Identity(identity_name1)
         tlsa_dict1 = DANE.process_response(self.tlsa_for_cert(identity_name1, 4, 0, 0))
         tlsa_dict2 = DANE.process_response(self.tlsa_for_cert(identity_name2, 4, 0, 0))
-        tlsa_dict3 = DANE.process_response(self.tlsa_for_cert(identity_name1, 3, 0, 0))
+        tlsa_dict3 = DANE.process_response(self.tlsa_for_cert(identity_name2, 3, 0, 0))
         tlsa_dict4 = DANE.process_response(self.tlsa_for_cert(identity_name1, 1, 0, 0))
-        identity.dane_credentials = [identity.process_tlsa(record) for record
+        identity.dane_credentials = [DANE.process_tlsa(record) for record
                                      in [tlsa_dict1, tlsa_dict2, tlsa_dict3, tlsa_dict4]]
         identity.tls = True
         identity.tcp = True
@@ -249,16 +263,17 @@ class TestIntegrationIdentity:
         # Both identities have the same CA.
         intermediate_certificate = self.get_dyn_asset(ca_intermediate_cert_name)
         root_certificate = self.get_dyn_asset(ca_root_cert_name)
-        intermediate_ski = DANE.get_authority_key_id_from_certificate(certificate)
-        root_ski = DANE.get_authority_key_id_from_certificate(intermediate_certificate)
-        requests_mock.get("https://device.example.net/.well-known/ca/{}.pem".format(intermediate_ski), 
+        intermediate_ski = PKI.get_authority_key_id_from_certificate(certificate)
+        root_ski = PKI.get_authority_key_id_from_certificate(intermediate_certificate)
+        mock_dane = DANE
+        mock_dane.get_a_record = MagicMock(return_value="192.168.1.1")
+        requests_mock.get("https://192.168.1.1/.well-known/ca/{}.pem".format(intermediate_ski), 
                               content=intermediate_certificate)
-        requests_mock.get("https://device.example.net/.well-known/ca/{}.pem".format(root_ski), 
+        requests_mock.get("https://192.168.1.1/.well-known/ca/{}.pem".format(root_ski), 
                               content=root_certificate)
         certs = identity.get_all_certificates()
-        # We only have one valid cert, across four TLSA records.
         pprint.pprint(certs)
-        assert len(certs) == 1
+        assert len(certs) == 2
 
     def test_integration_identity_get_all_certs_for_identity_filtered(self, requests_mock):
         """Test retrieval of all PKIX-CD certs for an identity."""
@@ -269,7 +284,7 @@ class TestIntegrationIdentity:
         tlsa_dict2 = DANE.process_response(self.tlsa_for_cert(identity_name2, 4, 0, 0))
         tlsa_dict3 = DANE.process_response(self.tlsa_for_cert(identity_name1, 3, 0, 0))
         tlsa_dict4 = DANE.process_response(self.tlsa_for_cert(identity_name1, 1, 0, 0))
-        identity.dane_credentials = [identity.process_tlsa(record) for record
+        identity.dane_credentials = [DANE.process_tlsa(record) for record
                                      in [tlsa_dict1, tlsa_dict2, tlsa_dict3, tlsa_dict4]]
         identity.tls = True
         identity.tcp = True
@@ -279,8 +294,8 @@ class TestIntegrationIdentity:
         # Both identities have the same CA.
         intermediate_certificate = self.get_dyn_asset(ca_intermediate_cert_name)
         root_certificate = self.get_dyn_asset(ca_root_cert_name)
-        intermediate_ski = DANE.get_authority_key_id_from_certificate(certificate)
-        root_ski = DANE.get_authority_key_id_from_certificate(intermediate_certificate)
+        intermediate_ski = PKI.get_authority_key_id_from_certificate(certificate)
+        root_ski = PKI.get_authority_key_id_from_certificate(intermediate_certificate)
         requests_mock.get("https://device.example.net/.well-known/ca/{}.pem".format(intermediate_ski), 
                               content=intermediate_certificate)
         requests_mock.get("https://device.example.net/.well-known/ca/{}.pem".format(root_ski), 

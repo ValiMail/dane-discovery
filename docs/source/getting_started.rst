@@ -41,13 +41,14 @@ Generate an x.509 object from a certificate in a TLSA record
 .. code-block:: python
 
     from dane_discovery.dane import DANE
+    from dane_discovery.pki import PKI
     dns_name = "dns.name.of.tlsa_record"
     tlsa_records = DANE.get_tlsa_records(dns_name)
     tlsa_record = tlsa_records[0]
     if tlsa_record["matching_type"] != 0:
         print("This is not configured as a certificate-bearing TLSA record.")
     certificate_association = tlsa_record["certificate_association"]
-    x509_obj = DANE.build_x509_object(certificate_association)
+    x509_obj = PKI.build_x509_object(certificate_association)
     print(x509_obj.subject)
 
 
