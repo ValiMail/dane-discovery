@@ -2,8 +2,54 @@ Changelog
 =========
 
 
-v0.16
+v0.17
 -----
+
+New
+~~~
+- Identity.get_pkix_cd_trust_chain returns a structured trust chain.
+  [Ash Wilson]
+- PKIX-CD authentication supports multi-tier PKI hierarchy. [Ash Wilson]
+
+Changes
+~~~~~~~
+- Refactor, breaking changes. Read the docs before pinning to this
+  release. [Ash Wilson]
+- Resolver override available or applied throughout. [Ash Wilson]
+
+  Close #70
+
+Other
+~~~~~
+- Build(deps): update requests requirement. [dependabot[bot]]
+
+  Updates the requirements on [requests](https://github.com/psf/requests) to permit the latest version.
+  - [Release notes](https://github.com/psf/requests/releases)
+  - [Changelog](https://github.com/psf/requests/blob/master/HISTORY.md)
+  - [Commits](https://github.com/psf/requests/compare/v2.24.0...v2.26.0)
+
+  ---
+  updated-dependencies:
+  - dependency-name: requests
+    dependency-type: direct:production
+  ...
+- Build(deps): update sphinx requirement from ~=4.0 to ~=4.1.
+  [dependabot[bot]]
+
+  Updates the requirements on [sphinx](https://github.com/sphinx-doc/sphinx) to permit the latest version.
+  - [Release notes](https://github.com/sphinx-doc/sphinx/releases)
+  - [Changelog](https://github.com/sphinx-doc/sphinx/blob/4.x/CHANGES)
+  - [Commits](https://github.com/sphinx-doc/sphinx/compare/v4.0.0...v4.1.0)
+
+  ---
+  updated-dependencies:
+  - dependency-name: sphinx
+    dependency-type: direct:production
+  ...
+
+
+v0.16 (2021-06-08)
+------------------
 
 New
 ~~~
