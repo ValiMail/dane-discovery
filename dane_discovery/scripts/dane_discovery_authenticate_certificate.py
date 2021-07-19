@@ -1,9 +1,8 @@
 """Authenticate a certificate using DANE PKIX-CD mode."""
 import argparse
-import os
 import sys
 
-from dane_discovery.dane import DANE
+from dane_discovery.pki import PKI
 from dane_discovery.identity import Identity
 
 
@@ -26,8 +25,8 @@ def main():
     # Determine DNS name
     try:
         if not args.dnsname:
-            cert_obj = DANE.build_x509_object(cert_file)
-            dns_name = DANE.get_dnsnames_from_cert(cert_obj)[0]
+            cert_obj = PKI.build_x509_object(cert_file)
+            dns_name = PKI.get_dnsnames_from_cert(cert_obj)[0]
         else:
             dns_name = args.dnsname 
     except IndexError:

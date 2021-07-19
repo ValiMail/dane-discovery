@@ -1,9 +1,7 @@
 """Download all PKIX-CD certificates for an identity."""
 import argparse
 import os
-import sys
 
-from dane_discovery.dane import DANE
 from dane_discovery.identity import Identity
 
 

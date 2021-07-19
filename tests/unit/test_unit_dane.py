@@ -38,21 +38,6 @@ class TestUnitDane:
                 DANE.generate_tlsa_record(3, 0, 3, certificate)
                 assert False
 
-    def test_unit_dane_validate_bad_certificate(self):
-        """Ensure that failed validation raises TLSAError."""
-        with pytest.raises(TLSAError):
-            DANE.validate_certificate("3082045130820339A00302010270E".encode())
-            assert False
-        with pytest.raises(TLSAError):
-            DANE.validate_certificate("abc123")
-            assert False
-
-    def test_unit_dane_build_bad_x509(self):
-        """Ensure that bad cert raises ValueError."""
-        with pytest.raises(ValueError):
-            DANE.build_x509_object("abc123")
-            assert False
-
     def test_unit_process_response(self):
         """Test parsing a response into named fields."""
         response = "name.example.com 123 IN TLSA 3 1 2 55F6DB74C524ACCA28B52C0BCFC28EEC4596F90D00C 596F90D0"
@@ -76,8 +61,11 @@ class TestUnitDane:
         actual = DANE.generate_url_for_ca_certificate("device.organization.example", "a-k-i")
         assert desired == actual
 
-    def test_format_keyid(self):
-        """Make sure that the KeyID formatter is correct."""
-        desired = "ab-cd-ef-gh"
-        instring = "abcdefgh"
-        assert DANE.format_keyid(instring) == desired
+    def test_unit_dane_validate_tlsa_fields(self):
+        response = "name.example.com 123 IN TLSA 3 1 2 55F6DB74C524ACCA28B52C0BCFC28EEC4596F90D00C 596F90D0"
+        assert DANE.validate_tlsa_fields(DANE.process_response(response)) is None
+
+    def test_unit_dane_validate_tlsa_fields_fail_nocert(self):
+        response = "name.example.com 123 IN TLSA 3 0 0 55F6DB74C524ACCA28B52C0BCFC28EEC4596F90D00C 596F90D0"
+        with pytest.raises(TLSAError):
+            DANE.validate_tlsa_fields(DANE.process_response(response))

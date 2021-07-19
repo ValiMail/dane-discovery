@@ -12,57 +12,28 @@ import dns.dnssec
 from dns.resolver import Resolver
 from cryptography import x509
 from cryptography.hazmat.backends import default_backend
-from cryptography.hazmat.primitives import serialization
-from cryptography.hazmat.primitives.asymmetric import padding
-from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicKey
-from cryptography.hazmat.primitives.asymmetric.ec import EllipticCurvePublicKey
-from cryptography.exceptions import InvalidSignature
-from cryptography.exceptions import UnsupportedAlgorithm
+from forcediphttpsadapter.adapters import ForcedIPHTTPSAdapter
 
 from .exceptions import TLSAError
+from .pki import PKI
 
 
 class DANE:
     """Abstract interactions involved in certificate retrieval."""
 
-    @classmethod
-    def build_x509_object(cls, certificate):
-        """Wrap format determination and return an x509 object.
-
-        Args:
-            certificate (str): Certificate in PEM or DER format.
-
-        Return:
-            cryptography.x509.Certificate object.
-
-        Raise:
-            TLSAError if unable to parse.
-        """
-        if isinstance(certificate, str):
-            certificate = certificate.encode()
-        try:
-            x5cert = cls.clean_up_certificate(certificate)
-            return x509.load_pem_x509_certificate(x5cert,
-                                                  default_backend())
-        except ValueError:  # This hits if it's a DER cert.
-            pass
-        return x509.load_der_x509_certificate(certificate,
-                                              default_backend())
-
-    @classmethod
-    def clean_up_certificate(cls, certificate):
-        """This method returns a clean PEM-encoded certificate."""
-        if isinstance(certificate, bytes):
-            certificate = certificate.decode("utf-8")
-        in_lines = certificate.splitlines()
-        out_lines = []
-        for line in in_lines:
-            if line.startswith(" "):
-                continue
-            if line.startswith("Certificate:"):
-                continue
-            out_lines.append(line)
-        return "\n".join(out_lines).encode()
+    descr = {"certificate_usage":
+             {0: "CA Constraint",
+              1: "PKIX-EE",
+              2: "DANE-TA",
+              3: "DANE-EE",
+              4: "PKIX-CD"},
+             "selector":
+             {0: "Full certificate match",
+              1: "Public key match"},
+             "matching_type":
+             {0: "Exact match against certificate association",
+              1: "Match the SHA-256 hash of the selected content",
+              2: "Match the SHA-512 hash of the selected content"}}
 
     @classmethod
     def generate_tlsa_record(cls, certificate_usage, selector,
@@ -85,8 +56,8 @@ class DANE:
         Raise:
             TLSAError if unsupported options are used.
         """
-        x509_obj = cls.build_x509_object(certificate)
-        cert_bytes = x509_obj.public_bytes(encoding=serialization.Encoding.DER)
+        x509_obj = PKI.build_x509_object(certificate)
+        cert_bytes = PKI.serialize_cert(x509_obj, "DER")
         if matching_type == 0:
             certificate_association = binascii.hexlify(cert_bytes).decode()
         elif matching_type == 1:
@@ -122,17 +93,15 @@ class DANE:
         valid_selectors = [0, 1]
         valid_hashing_algos = {"sha256": hashlib.sha256,
                                "sha512": hashlib.sha512}
-        x509_obj = cls.build_x509_object(certificate)
+        x509_obj = PKI.build_x509_object(certificate)
         if selector not in valid_selectors:
             raise ValueError("Invalid selector.")
         if sha not in valid_hashing_algos:
             raise ValueError("Invalid sha.")
         if selector == 0:
-            hashable = x509_obj.public_bytes(serialization.Encoding.DER)
+            hashable = PKI.serialize_cert(x509_obj, "DER")
         elif selector == 1:
-            pubkey = x509_obj.public_key()
-            hashable = pubkey.public_bytes(serialization.Encoding.DER,
-                                           serialization.PublicFormat.SubjectPublicKeyInfo)  # NOQA
+            hashable = PKI.serialize_cert(x509_obj, "RPK_DER")
         hash = valid_hashing_algos[sha](hashable).hexdigest()
         return hash
 
@@ -192,7 +161,7 @@ class DANE:
             # If the payload is actually a certificate, confirm that it parses.
             if result["matching_type"] == 0:
                 cert = result["certificate_association"]
-                cls.validate_certificate(cert)
+                PKI.validate_certificate_association(cert)
             for ctx in ["dnssec", "tcp", "tls"]:
                 result[ctx] = query_details[ctx]
             results.append(result.copy())
@@ -244,36 +213,10 @@ class DANE:
             ip_address = str(resolver.resolve(canonical_name, "A")[0])
         except dns.exception.DNSException as err:
             msg = "Caught error '{}' when retrieving A record.".format(err)
-            raise TLSAError(msg)
+            raise ValueError(msg)
         except IndexError:
-            raise TLSAError("No A records for {}".format(dnsname))
+            raise ValueError("No A records for {}".format(dnsname))
         return ip_address
-
-    @classmethod
-    def certificate_association_to_der(cls, certificate_association):
-        """Return DER bytes from a TLSA record's ``certificate_association``.
-
-        Args:
-            certificate_association (str): Certificate association information
-                extracted from a TLSA record.
-
-        Return:
-            bytes: DER-formatted certificate.
-        """
-        return binascii.unhexlify(certificate_association)
-
-    @classmethod
-    def der_to_pem(cls, der_cert):
-        """Return the PEM representation of a TLSA certificate_association.
-
-        Args:
-            der (str): A certificate in DER format.
-
-        Return:
-            bytes: PEM-formatted certificate.
-        """
-        cert = cls.build_x509_object(der_cert)
-        return cert.public_bytes(serialization.Encoding.PEM)
 
     @classmethod
     def process_response(cls, response):
@@ -325,28 +268,13 @@ class DANE:
             issues.append("invalid matching type value")
         if not re.match("^[A-Za-z0-9]+$", tlsa_fields["certificate_association"]):
             issues.append("invalid certificate association value")
+        if int(tlsa_fields["matching_type"]) == 0:
+            try:
+                PKI.validate_certificate_association(tlsa_fields["certificate_association"])
+            except TLSAError as err:
+                issues.append(str(err))
         if issues:
             raise TLSAError("Malformed DNS record: {}.".format(", ".join(issues)))
-
-    @classmethod
-    def validate_certificate(cls, certificate):
-        """Raise TLSAError if certificate does not parse, or return None.
-
-        Args:
-            certificate (str): Certificate association data from TLSA record.
-
-        Return:
-            None
-
-        Raise:
-            TLSAError if parsing fails.
-        """
-        try:
-            der = cls.certificate_association_to_der(certificate)
-            cls.build_x509_object(der)
-        except (ValueError, binascii.Error) as err:
-            msg = "Caught error '{}' with TLSA record.".format(err)
-            raise TLSAError(msg)
 
     @classmethod
     def authenticate_tlsa(cls, dns_name, record, nsaddr=None):
@@ -401,133 +329,23 @@ class DANE:
         if errmsg:
             raise TLSAError(errmsg)
         certificate_association = record["certificate_association"]
-        certificate_der = cls.certificate_association_to_der(certificate_association)
-        id_cert = cls.der_to_pem(certificate_der)
+        certificate_der = PKI.certificate_association_to_der(certificate_association)
+        id_cert = PKI.der_to_pem(certificate_der)
         try:
             # print("Load CA cert")
             ca_certs = cls.get_ca_certificates_for_identity(dns_name, id_cert, nsaddr=nsaddr)
             # print("Test cert sig.")
-            pkix_valid, reason = cls.validate_certificate_chain(id_cert, ca_certs)
+            pkix_valid, reason = PKI.validate_certificate_chain(id_cert, ca_certs)
             if not pkix_valid:
                 errmsg += "PKIX signature validation for identity failed: {}.\n".format(reason)
             # print("verify DNS name")
-            if not cls.verify_dnsname(dns_name, certificate_der):
+            if not PKI.verify_dnsname(dns_name, certificate_der):
                 errmsg += "DNS name match against SAN failed.\n"
         except TLSAError as err:
             errmsg += "Failed to get certificate for identity: {}\n".format(err)
         if errmsg:
             raise TLSAError(errmsg)
         return
-
-    @classmethod
-    def verify_dnsname(cls, dns_name, certificate_der):
-        """Return True if the first dNSName in the SAN matches."""
-        x5_obj = cls.build_x509_object(certificate_der)
-        san_dns_names = cls.get_dnsnames_from_cert(x5_obj)
-        if san_dns_names[0] != dns_name:
-            return False
-        return True
-
-    @classmethod
-    def get_dnsnames_from_cert(cls, x5_obj):
-        """Return the dnsnames from the certificate's SAN.
-
-        Args:
-            x5_obj (cryptography.x509): Certificate object.
-        
-        Return: 
-            list: str: dNSNames from certificate SAN.
-        """
-        san = x5_obj.extensions.get_extension_for_class(x509.SubjectAlternativeName)
-        return san.value.get_values_for_type(x509.DNSName)
-
-    @classmethod
-    def validate_certificate_chain(cls, entity_certificate, ca_certificates):
-        """Return True if PKI trust chain is established from entity to CA.
-        
-        This method attempts cryptographic validation of ``entity_certificate`` 
-        against the list of ``ca_certificates``. This method only checks 
-        public keys and signatures, independent of any x509v3 extensions.
-
-        The validation process completes successfully if a self-signed CA
-        certificate is encountered in ``ca_certificates``, which terminates a
-        cryptographically-validated chain from the entity certificate.
-
-        Args:
-            entity_certificate (str): Entity certificate to be verified.
-            ca_certificates (list of str): List of CA certificates for validating
-                ``entity_certificate``.
-        
-        returns:
-            (True, None) if certificate validates.
-            (False, str) if certificate does not validate, and str will contain the reason.
-        """
-        validation = {cls.get_subject_key_id_from_certificate(c): c
-                      for c in ca_certificates if cls.is_a_ca_certificate(c)}
-        currently_validating = x509.load_pem_x509_certificate(entity_certificate, default_backend()).public_bytes(serialization.Encoding.PEM)
-        if not validation:
-            return (False, "No CA certificates!")
-        # While we still have certs in the list...
-        while validation:
-            current_aki = cls.get_authority_key_id_from_certificate(currently_validating)
-            # If we don't have a CA cert that matches the current entity's AKI, we bail.
-            if current_aki not in validation:
-                msg = "Parent certificate not found!"
-                return (False, msg)
-            identified_parent = validation[current_aki]
-            # If the signature doesn't match, bail.
-            if not cls.verify_certificate_signature(currently_validating, identified_parent):
-                msg = "Cryptographic certificate validation failed!"
-                return (False, msg)
-            # If the parent CA certificate is self-signed...
-            if cls.get_authority_key_id_from_certificate(identified_parent) == cls.get_subject_key_id_from_certificate(identified_parent):
-                return (True, None)
-            currently_validating = x509.load_pem_x509_certificate(validation[current_aki], default_backend()).public_bytes(serialization.Encoding.PEM)
-            del(validation[current_aki])
-        msg = "Unable to build trust chain to self-signed CA certificate."
-        return (False, msg)
-
-    @classmethod
-    def is_a_ca_certificate(cls, certificate):
-        """Return True if ``certificate`` is a CA certificate."""
-        x5_obj = DANE.build_x509_object(certificate)
-        basic_constraints = x5_obj.extensions.get_extension_for_class(x509.BasicConstraints)
-        if basic_constraints.value.ca is True:
-            return True
-        return False
-
-    @classmethod
-    def verify_certificate_signature(cls, certificate, ca_certificate):
-        """ Return True if certificate was signed by ca_certificate.
-
-        Args:
-            entity_certificate (str): entity certificate in DER or PEM format.
-            ca_certificate (str): CA certificate in DER or PEM format.
-
-        Return: 
-            bool: True if the ca_certificate validates the entity_certificate.
-        """
-        issuer_public_key = DANE.build_x509_object(ca_certificate).public_key()
-        cert_to_check = DANE.build_x509_object(certificate)
-        if isinstance(issuer_public_key, RSAPublicKey):
-            try:
-                issuer_public_key.verify(cert_to_check.signature,
-                    cert_to_check.tbs_certificate_bytes, padding.PKCS1v15(),
-                    cert_to_check.signature_hash_algorithm)
-            except InvalidSignature:
-                return False
-        elif isinstance(issuer_public_key, EllipticCurvePublicKey):
-            try:
-                issuer_public_key.verify(cert_to_check.signature,
-                    cert_to_check.tbs_certificate_bytes,
-                    cert_to_check.signature_hash_algorithm)
-            except InvalidSignature:
-                return False
-            except UnsupportedAlgorithm:
-                return False
-        else:
-            raise ValueError("Unsupported public key type {}".format(type(issuer_public_key)))
-        return True
 
     @classmethod
     def generate_authority_hostname(cls, identity_name):
@@ -567,7 +385,6 @@ class DANE:
         authority_hostname = ".".join(authority_dns_labels)
         return authority_hostname
 
-
     @classmethod
     def generate_url_for_ca_certificate(cls, authority_hostname, authority_key_id):
         """Return a URL for the identity's ca certificate.
@@ -592,48 +409,7 @@ class DANE:
         return authority_url
 
     @classmethod
-    def get_authority_key_id_from_certificate(cls, certificate):
-        """Return the authorityKeyIdentifier for the certificate.
-        
-        
-        Args:
-            certificate (str): Certificate in PEM or DER format.
-        """
-        cert_obj = cls.build_x509_object(certificate)
-        akid = cert_obj.extensions.get_extension_for_class(
-            x509.AuthorityKeyIdentifier
-            ).value.key_identifier
-        akid_hex = binascii.hexlify(akid).decode()
-        return cls.format_keyid(akid_hex)
-
-    @classmethod
-    def format_keyid(cls, keyid):
-        """Return dash-delimited string from keyid."""
-        delimiter = '-'
-        hex_bytes = []
-        keyid = [x for x in keyid]
-        keyid.reverse()
-        while keyid:
-            first = keyid.pop()
-            second = keyid.pop()
-            hex_bytes.append("{}{}".format(first, second))
-        return delimiter.join([x for x in hex_bytes])
-
-    @classmethod
-    def get_subject_key_id_from_certificate(cls, certificate):
-        """Return the subjectKeyIdentifier for the certificate.
-        
-        
-        Args:
-            certificate (str): Certificate in PEM or DER format.
-        """
-        cert_obj = cls.build_x509_object(certificate)
-        skid = x509.SubjectKeyIdentifier.from_public_key(cert_obj.public_key())
-        skid_hex = binascii.hexlify(skid.digest).decode()
-        return cls.format_keyid(skid_hex)
-
-    @classmethod
-    def get_ca_certificates_for_identity(cls, identity_name, certificate, max_levels=3, nsaddr=None):
+    def get_ca_certificates_for_identity(cls, identity_name, certificate, max_levels=100, nsaddr=None):
         """Return the CA certificates for verifying identity_name.
         
         Returns the PEM representation of the CA certificates
@@ -654,24 +430,29 @@ class DANE:
         """
         ca_certs = []
         authority_hostname = cls.generate_authority_hostname(identity_name)
-        current_cert = x509.load_pem_x509_certificate(certificate, default_backend()).public_bytes(serialization.Encoding.PEM)
+        current_cert = PKI.serialize_cert(PKI.build_x509_object(certificate), "PEM")
         while True:
             try:
-                parent_ski = cls.get_authority_key_id_from_certificate(current_cert)
-            except ValueError:
-                print("ValueError when parsing {}".format(current_cert))
+                parent_ski = PKI.get_authority_key_id_from_certificate(current_cert)
+            except ValueError as err:
+                print("ValueError when parsing AKI from {}: ".format(current_cert, err))
+                raise err
             ca_certificate_url = cls.generate_url_for_ca_certificate(authority_hostname, parent_ski)
-            presumed_pem = cls.wrap_requests(ca_certificate_url, nsaddr=nsaddr)
+            presumed_pem = cls.wrap_requests(ca_certificate_url, nsaddr)
             if not presumed_pem:
                 raise ValueError("CA certificate not found at {}".format(ca_certificate_url))
             # The following line raises ValueError if it fails to parse.
-            pem = x509.load_pem_x509_certificate(presumed_pem, default_backend()).public_bytes(serialization.Encoding.PEM)
-            # This catches self-signed certs.
-            if pem in ca_certs:
-                break
+            pem = PKI.serialize_cert(PKI.build_x509_object(presumed_pem), "PEM")
             ca_certs.append(pem)
             current_cert = pem
+            # This catches self-signed certs.
+            ski = PKI.get_subject_key_id_from_certificate(pem)
+            aki = PKI.get_authority_key_id_from_certificate(pem)
+            if ski == aki:
+                # print("Found root cert, breaking!")
+                break
             if len(ca_certs) >= max_levels:
+                print("Max iterations reached ({}), breaking!".format(max_levels))
                 break
         return ca_certs
     
@@ -681,9 +462,9 @@ class DANE:
         parsed = urlparse(url)
         hostname = parsed.hostname
         ip_address = cls.get_a_record(hostname, nsaddr)
-        parsed = parsed._replace(netloc=ip_address)
-        url = urlunparse(parsed)
-        r = requests.get(url, headers={"Host": hostname})
+        session = requests.Session()
+        session.mount(url, ForcedIPHTTPSAdapter(dest_ip=ip_address))
+        r = session.get(url, headers={"Host": hostname})
         return r.content
 
     @classmethod
@@ -709,15 +490,14 @@ class DANE:
         """
         authority_hostname = cls.generate_authority_hostname(identity_name)
         try:
-            authority_key_id = cls.get_authority_key_id_from_certificate(certificate)
+            authority_key_id = PKI.get_authority_key_id_from_certificate(certificate)
             ca_certificate_url = cls.generate_url_for_ca_certificate(authority_hostname, authority_key_id)
             r = requests.get(ca_certificate_url)
-            presumed_pem = r.content
             if not r:
                 raise ValueError("CA certificate not found at {}".format(ca_certificate_url))
             # The following line raises ValueError if it fails to parse.
-            x509.load_pem_x509_certificate(presumed_pem, default_backend())
-            return presumed_pem
+            x509.load_pem_x509_certificate(r.content, default_backend())
+            return r.content
         except requests.exceptions.RequestException as err:
             msg = "Error making request: {}".format(err)
             raise ValueError(msg)
@@ -725,5 +505,46 @@ class DANE:
             msg = "Unable to retrieve the authorityKeyID from the certificate."
             raise ValueError(msg)
 
+    @classmethod
+    def process_tlsa(cls, tlsa_record):
+        """Return a dictionary describing the TLSA record's contents.
 
+        Args:
+            tlsa_record (dict): Dictionary describing TLSA record contents.
+
+        Dictionary keys:
+
+            ``tlsa_fields``: TLSA record parsed into a list.
+        
+            ``tlsa_parsed``: A dictionary of parsed TLSA record fields.
+        
+            ``certificate_usage``: Text description of the TLSA field.
+        
+            ``matching_type``: Text description of the TLSA field.
+        
+            ``selector``: Text description of the TLSA field.
+        
+            ``certificate_metadata``: Metadata parsed from the certificate.
+        
+            ``public_key_object``: If the TLSA record contains a public key,
+            this will be the same object as generated by
+            cryptography.hazmat.primitives.serialization.load_der_public_key()
+        
+            ``certificate_object``: If the TLSA record contains a certificate,
+            this will be a cryptography.x509.Certificate object.
+        """
+        tlsa_fields = ["certificate_usage", "selector",
+                       "matching_type", "certificate_association"]
+        cert_association = tlsa_record["certificate_association"]
+        cert_der = PKI.certificate_association_to_der(cert_association)
+        retval = {"certificate_metadata": None, "public_key_object": None}
+        retval["tlsa_fields"] = [tlsa_record[x] for x in tlsa_fields]
+        retval["tlsa_parsed"] = tlsa_record.copy()
+        for target in ["certificate_usage", "matching_type", "selector"]:
+            retval[target] = cls.descr[target][int(tlsa_record[target])]
+        if tlsa_record["matching_type"] == 0:
+            retval["certificate_metadata"] = PKI.get_cert_meta(cert_der)
+            retval["certificate_object"] = PKI.build_x509_object(cert_der)
+            retval["public_key_object"] = retval["certificate_object"].public_key()
+        return retval
 
