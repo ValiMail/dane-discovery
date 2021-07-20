@@ -31,7 +31,7 @@ Load a certificate from DNS and print the PEM representation
         raise ValueError("No leaf certificate found for {}.".format(dns_name))
 
     der_cert = PKI.certificate_association_to_der(tlsa_record["certificate_association"])
-    print(DANE.der_to_pem(der_cert))
+    print(PKI.der_to_pem(der_cert))
 
 
 TLSA to x.509

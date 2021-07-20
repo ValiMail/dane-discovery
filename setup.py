@@ -23,8 +23,7 @@ def get_version():
 
 def build_long_desc():
     """Return the long description of the package."""
-    return "\n".join([get_file_contents(f) for f in ["README.rst",
-                                                     "CHANGELOG.rst"]])
+    return "\n".join([get_file_contents(f) for f in ["README.rst"]])
 
 
 setup(name=PROJECT_NAME,
@@ -36,6 +35,7 @@ setup(name=PROJECT_NAME,
       keywords="dane tlsa dns certificate discovery",
       url="https://github.com/valimail/{}".format(PROJECT_NAME),
       long_description=build_long_desc(),
+      long_description_content_type="text/x-rst",
       packages=["dane_discovery", "dane_discovery.scripts"],
       entry_points={
           "console_scripts": [

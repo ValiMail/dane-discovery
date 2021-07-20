@@ -134,12 +134,16 @@ jobs:
     steps:
       - checkout
       - run:
+         name: Install Twine
+         command: pip3 install twine
+      - run:
          name: Build bdist wheel
          command: |
            python setup.py sdist
            python setup.py bdist_wheel
            python setup.py bdist --format=gztar
            ls ./*
+           twine check dist/*
 
   deploy:
     docker:
