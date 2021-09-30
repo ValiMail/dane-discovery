@@ -2,8 +2,38 @@ Changelog
 =========
 
 
-v0.17
+v0.18
 -----
+- Build(deps): update cryptography requirement from ~=3.0 to >=3,<36.
+  [dependabot[bot]]
+
+  Updates the requirements on [cryptography](https://github.com/pyca/cryptography) to permit the latest version.
+  - [Release notes](https://github.com/pyca/cryptography/releases)
+  - [Changelog](https://github.com/pyca/cryptography/blob/main/CHANGELOG.rst)
+  - [Commits](https://github.com/pyca/cryptography/compare/3.0...35.0.0)
+
+  ---
+  updated-dependencies:
+  - dependency-name: cryptography
+    dependency-type: direct:production
+  ...
+- Build(deps): update sphinx requirement from ~=4.1 to ~=4.2.
+  [dependabot[bot]]
+
+  Updates the requirements on [sphinx](https://github.com/sphinx-doc/sphinx) to permit the latest version.
+  - [Release notes](https://github.com/sphinx-doc/sphinx/releases)
+  - [Changelog](https://github.com/sphinx-doc/sphinx/blob/4.x/CHANGES)
+  - [Commits](https://github.com/sphinx-doc/sphinx/compare/v4.1.0...v4.2.0)
+
+  ---
+  updated-dependencies:
+  - dependency-name: sphinx
+    dependency-type: direct:production
+  ...
+
+
+v0.17 (2021-07-20)
+------------------
 
 New
 ~~~
@@ -13,6 +43,7 @@ New
 
 Changes
 ~~~~~~~
+- Fix issues related to badly-generated markdown. [Ash Wilson]
 - Refactor, breaking changes. Read the docs before pinning to this
   release. [Ash Wilson]
 - Resolver override available or applied throughout. [Ash Wilson]
