@@ -11,13 +11,14 @@ from .exceptions import TLSAError
 class Identity:
     """Represent a DANE identity."""
 
-    def __init__(self, dnsname, private_key=None, resolver_override=None):
+    def __init__(self, dnsname, private_key=None, resolver_override=None, dns_timeout=5):
         """Initialize with the DNS name.
 
         Args:
             dnsname (str): DNS name of identity.
             private_key (str): Private key in PEM format. Optional.
             resolver_override (str): Override the default resolver IP address.
+            dns_timeout (int): Set DNS timeout.
 
         Raise:
             TLSAError if identity does not exist in DNS.
@@ -29,6 +30,7 @@ class Identity:
         self.private_key = PKI.load_private_key(private_key)
         self.resolver_override = resolver_override
         self.dane_credentials = []
+        self.dns_timeout = dns_timeout
         self.set_dane_credentials(self.dnsname)
 
     def validate_certificate(self, certificate):
@@ -96,7 +98,7 @@ class Identity:
             return False, "Certificate and TLSA certificate association do not match."
         # Get the CA certificate
         try:
-            ca_pems = DANE.get_ca_certificates_for_identity(self.dnsname, cert_der, 100, self.resolver_override)
+            ca_pems = DANE.get_ca_certificates_for_identity(self.dnsname, cert_der, 100, self.resolver_override, self.dns_timeout)
         except ValueError as err:
             return False, str(err)
         cert_pem = cert_obj.public_bytes(serialization.Encoding.PEM)
@@ -119,7 +121,7 @@ class Identity:
         certificate = PKI.build_x509_object(certificate).public_bytes(serialization.Encoding.PEM)
         retval = {0: certificate}
         next_level = 1
-        ca_certificates = DANE.get_ca_certificates_for_identity(self.dnsname, certificate, max_levels, self.resolver_override)
+        ca_certificates = DANE.get_ca_certificates_for_identity(self.dnsname, certificate, max_levels, self.resolver_override, self.dns_timeout)
         chain_valid, reason = PKI.validate_certificate_chain(certificate, ca_certificates)
         if not chain_valid:
             raise ValueError(reason)
@@ -166,7 +168,7 @@ class Identity:
         if strict:
             try:
                 target["tlsa_parsed"]["dnssec"] = self.dnssec
-                DANE.authenticate_tlsa(self.dnsname, target["tlsa_parsed"], self.resolver_override)
+                DANE.authenticate_tlsa(self.dnsname, target["tlsa_parsed"], self.resolver_override, self.dns_timeout)
             except ValueError as err:
                 raise TLSAError(err)
         return target["certificate_object"]
@@ -215,7 +217,7 @@ class Identity:
         if strict:
             try:
                 target["tlsa_parsed"]["dnssec"] = self.dnssec
-                DANE.authenticate_tlsa(self.dnsname, target["tlsa_parsed"], self.resolver_override)
+                DANE.authenticate_tlsa(self.dnsname, target["tlsa_parsed"], self.resolver_override, self.dns_timeout)
             except ValueError as err:
                 raise TLSAError(err)
         return target["certificate_object"]
@@ -328,7 +330,7 @@ class Identity:
             resolver_override (str): Optional. Override the default resolver
                 IP address.
         """
-        tlsa_records = DANE.get_tlsa_records(dnsname, self.resolver_override)
+        tlsa_records = DANE.get_tlsa_records(dnsname, self.resolver_override, self.dns_timeout)
         request_context_fields = ["dnssec", "tcp", "tls"]
         for field in request_context_fields:
             setattr(self, field, tlsa_records[0][field])

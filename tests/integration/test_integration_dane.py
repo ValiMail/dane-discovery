@@ -183,7 +183,7 @@ class TestIntegrationDane:
         """Test failure handling for nonexistent records."""
         test_dns_name = "_443._tcp.example.net"
         with pytest.raises(TLSAError):
-            DANE.get_tlsa_records(test_dns_name, "127.0.0.1")
+            DANE.get_tlsa_records(test_dns_name, "127.0.0.1", 1)
             assert False
 
     def test_integration_dane_get_tlsa_records_sha(self):
