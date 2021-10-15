@@ -2,8 +2,37 @@ Changelog
 =========
 
 
-v0.18
+v0.19
 -----
+
+New
+~~~
+- Configurable DNS timeout. [Ash Wilson]
+
+  Close #77
+- Add Identity.cert_matches_private_key() [Ash Wilson]
+
+  Close #78
+
+Other
+~~~~~
+- Build(deps): update pytest-cov requirement from ~=2.12 to ~=3.0.
+  [dependabot[bot]]
+
+  Updates the requirements on [pytest-cov](https://github.com/pytest-dev/pytest-cov) to permit the latest version.
+  - [Release notes](https://github.com/pytest-dev/pytest-cov/releases)
+  - [Changelog](https://github.com/pytest-dev/pytest-cov/blob/master/CHANGELOG.rst)
+  - [Commits](https://github.com/pytest-dev/pytest-cov/compare/v2.12.0...v3.0.0)
+
+  ---
+  updated-dependencies:
+  - dependency-name: pytest-cov
+    dependency-type: direct:production
+  ...
+
+
+v0.18 (2021-09-30)
+------------------
 - Build(deps): update cryptography requirement from ~=3.0 to >=3,<36.
   [dependabot[bot]]
 
