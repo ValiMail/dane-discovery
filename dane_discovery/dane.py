@@ -106,7 +106,7 @@ class DANE:
         return hash
 
     @classmethod
-    def get_first_leaf_certificate(cls, dnsname, nsaddr=None):
+    def get_first_leaf_certificate(cls, dnsname, nsaddr=None, dns_timeout=5):
         """Return the first leaf certificate from TLSA records at ``dnsname``.
 
         This method essentially wraps
@@ -117,20 +117,21 @@ class DANE:
         Args:
             dnsname (str): DNS name to query for certificate.
             nsaddr (str): Override system resolver.
+            dns_timeout (int): Timeout in seconds for DNS query.
 
         Return:
             dict: Dictionary with keys for ``certificate_usage``, ``selector``,
                 ``matching_type``, ``certificate_association``.
                 If no leaf certificate is found, None is returned.
         """
-        all_tlsa_records = cls.get_tlsa_records(dnsname, nsaddr=nsaddr)
+        all_tlsa_records = cls.get_tlsa_records(dnsname, nsaddr=nsaddr, dns_timeout=dns_timeout)
         for tlsa in all_tlsa_records:
             if (tlsa["certificate_usage"] in [1, 3, 4]
                     and tlsa["matching_type"] == 0):
                 return tlsa
 
     @classmethod
-    def get_tlsa_records(cls, dnsname, nsaddr=None):
+    def get_tlsa_records(cls, dnsname, nsaddr=None, dns_timeout=5):
         """TLSA records in a list of dictionaries.
 
         This method retrieves and parses the TLSA records from
@@ -139,6 +140,7 @@ class DANE:
         Args:
             dnsname (str): DNS name to query for TLSA record.
             nsaddr (str): Nameserver address.
+            dns_timeout (int): Timeout in seconds for DNS query.
 
         Return:
             list of dict: Dictionaries with the following keys:
@@ -168,30 +170,30 @@ class DANE:
         return results
 
     @classmethod
-    def get_responses(cls, dnsname, rr_type, nsaddr=None):
+    def get_responses(cls, dnsname, rr_type, nsaddr=None, dns_timeout=5):
         """Return a list of dicts containing DNS RRs and security context.
 
         Args:
             dnsname (str): DNS name for query.
             rr_type (str): RR type to query. Defaults to TLSA.
             nsaddr (str): Nameserver override address.
+            dns_timeout (int): Timeout in seconds for DNS query.
 
         Return:
             dict: Keys are ``responses`` (list of string),
                 ``dnssec`` (bool), ``tls`` (bool), ``tcp`` (bool).
         """
-        timeout = 5
         default_resolver = dns.resolver.get_default_resolver().nameservers[0]
         resolver = nsaddr if nsaddr else default_resolver
         query = dns.message.make_query(dnsname, rr_type, want_dnssec=True)
         query_details = {"tls": False, "dnssec": False}
         try:
-            resp_msg = dns.query.tls(query, resolver, timeout=timeout)
+            resp_msg = dns.query.tls(query, resolver, timeout=dns_timeout)
             query_details["tls"] = True
             query_details["tcp"] = True
         except ConnectionRefusedError:
             resp_msg, was_tcp = dns.query.udp_with_fallback(query, resolver,
-                                                            timeout=timeout)
+                                                            timeout=dns_timeout)
             query_details["tcp"] = True if was_tcp else False
         flags_int = resp_msg.flags
         flags = dns.flags.to_text(flags_int)
@@ -203,7 +205,7 @@ class DANE:
         return query_details
 
     @classmethod
-    def get_a_record(cls, dnsname, nsaddr=None):
+    def get_a_record(cls, dnsname, nsaddr=None, dns_timeout=5):
         """Get the first A record."""
         resolver = Resolver()
         if nsaddr:
@@ -277,7 +279,7 @@ class DANE:
             raise TLSAError("Malformed DNS record: {}.".format(", ".join(issues)))
 
     @classmethod
-    def authenticate_tlsa(cls, dns_name, record, nsaddr=None):
+    def authenticate_tlsa(cls, dns_name, record, nsaddr=None, dns_timeout=5):
         """Return None if the identity is authenticated, or raise ValueError.
 
         This method authenticates a TLSA record as follows:
@@ -307,6 +309,7 @@ class DANE:
                 ``matching_type``, ``certificate_association``, 
                 and ``dnssec``.
             nsaddr (str): Name server override.
+            dns_timeout (int): Timeout in seconds for DNS query.
         
         Return:
             None if this identity can be cryptographically authenticated.
@@ -409,7 +412,7 @@ class DANE:
         return authority_url
 
     @classmethod
-    def get_ca_certificates_for_identity(cls, identity_name, certificate, max_levels=100, nsaddr=None):
+    def get_ca_certificates_for_identity(cls, identity_name, certificate, max_levels=100, nsaddr=None, dns_timeout=5):
         """Return the CA certificates for verifying identity_name.
         
         Returns the PEM representation of the CA certificates
@@ -420,6 +423,7 @@ class DANE:
             identity_name (str): DNS name of identity.
             certificate (str): Certificate in PEM or DER format.
             max_levels (int): Only retrieve this many parent certificates.
+            dns_timeout (int): Timeout in seconds for DNS query.
 
         Raise:
             ValueError if no CA certificate is found or the
@@ -457,11 +461,11 @@ class DANE:
         return ca_certs
     
     @classmethod
-    def wrap_requests(cls, url, nsaddr=None):
+    def wrap_requests(cls, url, nsaddr=None, dns_timeout=5):
         """Wrap requests for nameserver override."""
         parsed = urlparse(url)
         hostname = parsed.hostname
-        ip_address = cls.get_a_record(hostname, nsaddr)
+        ip_address = cls.get_a_record(hostname, nsaddr, dns_timeout)
         session = requests.Session()
         session.mount(url, ForcedIPHTTPSAdapter(dest_ip=ip_address))
         r = session.get(url, headers={"Host": hostname})
