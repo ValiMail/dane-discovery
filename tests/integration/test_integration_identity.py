@@ -304,3 +304,24 @@ class TestIntegrationIdentity:
         # We only have one PKIX-EE cert.
         assert len(certs) == 1
 
+    def test_integration_identity_cert_matches_private_key(self):
+        """Test certs against private keys."""
+        for identity_name in identity_names:
+            key_pem = self.get_dyn_asset("{}.key.pem".format(identity_name))
+            cert_pem = self.get_dyn_asset("{}.cert.pem".format(identity_name))
+            cert_obj = PKI.build_x509_object(cert_pem)
+            identity = Identity(identity_name, key_pem)
+            status, reason = identity.cert_matches_private_key(cert_obj)
+            print(reason)
+            assert status
+
+    def test_integration_identity_cert_matches_private_key_fail(self):
+        """Test certs against private keys failure."""
+        key_pem = self.get_dyn_asset("{}.key.pem".format(rsa_identity_name))
+        cert_pem = self.get_dyn_asset("{}.cert.pem".format(ecc_identity_name))
+        cert_obj = PKI.build_x509_object(cert_pem)
+        identity = Identity(ecc_identity_name, key_pem)
+        status, reason = identity.cert_matches_private_key(cert_obj)
+        print(reason)
+        assert not status
+
