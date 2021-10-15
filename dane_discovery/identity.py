@@ -335,4 +335,28 @@ class Identity:
         self.dane_credentials = [DANE.process_tlsa(record) for record
                                  in tlsa_records]
 
+    def cert_matches_private_key(self, cert_obj):
+        """Return boolean for alignment between private key and cert_obj, and a reason.
+        
+        Args:
+            cert_obj (cryptography.x509): A certificate object.
+
+        Returns:
+            bool: True if the public key in the certificate matches the private key.
+            str: If validation failed, why it failed.
+        """
+        cert_public_key = cert_obj.public_key()
+        public_key_from_privkey = self.private_key.public_key()
+        cert_pubkey_type = type(cert_public_key)
+        privkey_pubkey_type = type(public_key_from_privkey)
+        if not cert_pubkey_type == privkey_pubkey_type:
+            reason = "Key type mismatch: cert: {} privkey: {}.".format(cert_pubkey_type,
+                                                                       privkey_pubkey_type)
+            return False, reason
+        if not (cert_public_key.public_bytes(serialization.Encoding.DER, serialization.PublicFormat.SubjectPublicKeyInfo) 
+                == public_key_from_privkey.public_bytes(serialization.Encoding.DER, serialization.PublicFormat.SubjectPublicKeyInfo)):
+            reason = "Public key bytes mismatch."
+            return False, reason
+        return True, ""
+
     
