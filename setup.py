@@ -45,7 +45,7 @@ setup(name=PROJECT_NAME,
           ]
       },
       install_requires=["dnspython==2.1.0", 
-                        "cryptography>=3,<36",
+                        "cryptography>=3,<37",
                         "requests>=2.24,<2.27",
                         "forcediphttpsadapter"],
       classifiers=[
