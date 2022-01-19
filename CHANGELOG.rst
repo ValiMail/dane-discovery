@@ -2,8 +2,35 @@ Changelog
 =========
 
 
-v0.20
+v0.21
 -----
+- Build(deps): bump dnspython from 2.1.0 to 2.2.0. [dependabot[bot]]
+
+  Bumps [dnspython]() from 2.1.0 to 2.2.0.
+
+  ---
+  updated-dependencies:
+  - dependency-name: dnspython
+    dependency-type: direct:production
+    update-type: version-update:semver-minor
+  ...
+- Build(deps): update sphinx requirement from ~=4.3 to ~=4.4.
+  [dependabot[bot]]
+
+  Updates the requirements on [sphinx](https://github.com/sphinx-doc/sphinx) to permit the latest version.
+  - [Release notes](https://github.com/sphinx-doc/sphinx/releases)
+  - [Changelog](https://github.com/sphinx-doc/sphinx/blob/4.x/CHANGES)
+  - [Commits](https://github.com/sphinx-doc/sphinx/compare/v4.3.0...v4.4.0)
+
+  ---
+  updated-dependencies:
+  - dependency-name: sphinx
+    dependency-type: direct:production
+  ...
+
+
+v0.20 (2022-01-04)
+------------------
 - Build(deps): update requests requirement. [dependabot[bot]]
 
   Updates the requirements on [requests](https://github.com/psf/requests) to permit the latest version.
