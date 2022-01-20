@@ -39,7 +39,7 @@ class Identity:
         This method returns two values, success and status.
 
         This method only checks against TLSA records with
-        certificate_usage 4, or PKIX-CD.
+        certificate_usage 3  or 4 (PKIX-CD).
         
         Args:
             certificate (str): Certificate in PEM or DER format.
@@ -50,7 +50,7 @@ class Identity:
         """
         cert_obj = PKI.build_x509_object(certificate)
         why_not = []
-        default = "Unable to find a TLSA record with certificate usage 4."
+        default = "Unable to find an authentic TLSA record."
         # For each TLSA certificate, attempt to validate local cert.
         for credential in self.dane_credentials:
             valid = False
@@ -61,9 +61,50 @@ class Identity:
                     return True, reason
                 else:
                     why_not.append(reason)
+            if cert_usage == "DANE-EE":
+                valid, reason = self.validate_dane_ee(cert_obj, credential)
+                if valid:
+                    return True, reason
+                else:
+                    why_not.append(reason)
         if not why_not:
             why_not.append(default)
         return False, "\n".join(why_not)
+
+    def validate_dane_ee(self, cert_obj, credential):
+        """Validate a certificate with certificate_usage 3.
+        
+        DANE-EE expects selector 0 and matching type 0. This
+        method will not validate configuration which differs 
+        from this expectation.
+
+        Args:
+            cert_obj (cryptography.x509): Certificate object.
+            credential (dict): Parsed credential from DNS.
+
+        Returns:
+            bool: True or False for validation
+            string: Reason for validation pass/fail.
+        """
+        why_not = []
+        # Check TLSA records for wrong selector and matching type.
+        selector = credential["tlsa_parsed"]["selector"]
+        matching_type = credential["tlsa_parsed"]["matching_type"]
+        cert_association = credential["tlsa_parsed"]["certificate_association"]
+        if selector != 0:
+            why_not.append("Selector set to {}.".format(selector))
+        if matching_type != 0:
+            why_not.append("Matching type set to {}.".format(matching_type))
+        if self.dnssec is False:
+            why_not.append("DNSSEC is required for DANE-EE.")
+        if why_not:
+            return False, "\n".join(why_not)
+        # Check to see that the DER matches what's in DNS
+        cert_der = cert_obj.public_bytes(encoding=serialization.Encoding.DER)
+        tlsa_der = PKI.certificate_association_to_der(cert_association)
+        if not cert_der == tlsa_der:
+            return False, "Presented certificate and TLSA certificate association do not match."
+        return True, "Format and authority CA signature verified."
 
     def validate_pkix_cd(self, cert_obj, credential):
         """Validate a certificate with certificate_usage 4.
