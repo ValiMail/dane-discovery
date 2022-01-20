@@ -2,8 +2,18 @@ Changelog
 =========
 
 
-v0.21
+v0.22
 -----
+
+New
+~~~
+- Validate certificate usage 3 (DANE-EE). [Ash Wilson]
+
+  Close #86
+
+
+v0.21 (2022-01-19)
+------------------
 - Build(deps): bump dnspython from 2.1.0 to 2.2.0. [dependabot[bot]]
 
   Bumps [dnspython]() from 2.1.0 to 2.2.0.

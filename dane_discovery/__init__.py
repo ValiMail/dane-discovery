@@ -1,4 +1,4 @@
 """DANE for certificate discovery."""
 
 __author__ = "Ash Wilson"
-__version__ = "0.21"
+__version__ = "0.22"
