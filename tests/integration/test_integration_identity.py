@@ -139,6 +139,40 @@ class TestIntegrationIdentity:
         requests_mock.get("https://device.example.net/.well-known/ca/{}.pem".format(root_ski), 
                               content=root_certificate)
         assert identity.validate_certificate(certificate)
+
+    def test_integration_identity_validate_certificate_dane_ee_pass(self, requests_mock):
+        """Test validating a local certificate when certificate_usage is 3."""
+        identity_name = ecc_identity_name
+        certificate_path = self.get_path_for_dyn_asset("{}.cert.pem".format(identity_name))
+        certificate = self.get_dyn_asset(certificate_path)
+        identity = Identity(identity_name)
+        tlsa_dict = DANE.process_response(self.tlsa_for_cert(identity_name, 3, 0, 0))
+        identity.dane_credentials = [DANE.process_tlsa(record) for record
+                                     in [tlsa_dict]]
+        identity.tls = True
+        identity.tcp = True
+        identity.dnssec = True
+        mock_dane = DANE
+        mock_dane.get_a_record = MagicMock(return_value="192.168.1.1")
+        assert identity.validate_certificate(certificate)
+
+    def test_integration_identity_validate_certificate_dane_ee_fail_no_dnssec(self, requests_mock):
+        """Test validating a local certificate when certificate_usage is 3."""
+        identity_name = ecc_identity_name
+        certificate_path = self.get_path_for_dyn_asset("{}.cert.pem".format(identity_name))
+        certificate = self.get_dyn_asset(certificate_path)
+        identity = Identity(identity_name)
+        tlsa_dict = DANE.process_response(self.tlsa_for_cert(identity_name, 3, 0, 0))
+        identity.dane_credentials = [DANE.process_tlsa(record) for record
+                                     in [tlsa_dict]]
+        identity.tls = True
+        identity.tcp = True
+        identity.dnssec = False
+        mock_dane = DANE
+        mock_dane.get_a_record = MagicMock(return_value="192.168.1.1")
+        valid, reason = identity.validate_certificate(certificate)
+        assert valid is False
+        
     
     def test_integration_identity_validate_certificate_pkix_cd_dnssec_pass(self, requests_mock):
         """Test validating a local certificate when certificate_usage is 4 and DNSSEC is present."""
