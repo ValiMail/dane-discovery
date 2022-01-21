@@ -195,9 +195,7 @@ class DANE:
             resp_msg, was_tcp = dns.query.udp_with_fallback(query, resolver,
                                                             timeout=dns_timeout)
             query_details["tcp"] = True if was_tcp else False
-        flags_int = resp_msg.flags
-        flags = dns.flags.to_text(flags_int)
-        query_details["dnssec"] = True if "AD" in flags.split() else False
+        query_details["dnssec"] = dns.flags.AD in resp_msg.flags
         answer = resp_msg.answer
         # Parse out RRSIGs and such- we only want the exact RR types we initially requested.
         query_details["responses"] = [a.to_text() for a in answer 

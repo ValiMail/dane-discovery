@@ -104,7 +104,7 @@ class Identity:
         tlsa_der = PKI.certificate_association_to_der(cert_association)
         if not cert_der == tlsa_der:
             return False, "Presented certificate and TLSA certificate association do not match."
-        return True, "Format and authority CA signature verified."
+        return True, "Format and DNSSEC delivery verified."
 
     def validate_pkix_cd(self, cert_obj, credential):
         """Validate a certificate with certificate_usage 4.
