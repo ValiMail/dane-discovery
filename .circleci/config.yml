@@ -5,7 +5,7 @@ workflows:
     jobs:
       - build_and_test:
           name: py36
-          python_version: "3.6"
+          python_version: "3.11"
           filters:
             tags:
               only: /.*/
@@ -48,7 +48,7 @@ jobs:
        python_version:
          type: string
     docker:
-      - image: circleci/python:<< parameters.python_version >>
+      - image: cimg/python:3.11
     steps:
       - checkout
       - run:
@@ -75,7 +75,7 @@ jobs:
   
   build_and_test_with_coverage:
     docker:
-      - image: circleci/python:3.8
+      - image: cimg/python:3.11
     steps:
       - checkout
       - run:
@@ -108,7 +108,7 @@ jobs:
 
   build_docs:
     docker:
-      - image: circleci/python:3.8
+      - image: cimg/python:3.11
     steps:
       - checkout
       - run:
@@ -130,7 +130,7 @@ jobs:
 
   packaging_test:
     docker:
-      - image: circleci/python:3.8
+      - image: cimg/python:3.11
     steps:
       - checkout
       - run:
@@ -147,7 +147,7 @@ jobs:
 
   deploy:
     docker:
-      - image: circleci/python:3.8
+      - image: cimg/python:3.11
     steps:
       - checkout
       - run:
