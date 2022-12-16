@@ -63,6 +63,7 @@ jobs:
             mkdir -p tests/fixtures/dynamic
             sudo cp ${HOME}/export/* tests/fixtures/dynamic/
             sudo chown -R `whoami` ${HOME}
+            pip3 install --upgrade pip
       - run:
           name: Install deps and package
           command: |
