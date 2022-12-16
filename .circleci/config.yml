@@ -48,7 +48,7 @@ jobs:
        python_version:
          type: string
     docker:
-      - image: circleci/python:<< parameters.python_version >>
+      - image: cimg/python:<< parameters.python_version >>
     steps:
       - checkout
       - run:
@@ -63,6 +63,7 @@ jobs:
             mkdir -p tests/fixtures/dynamic
             sudo cp ${HOME}/export/* tests/fixtures/dynamic/
             sudo chown -R `whoami` ${HOME}
+            pip3 install --upgrade pip
       - run:
           name: Install deps and package
           command: |
@@ -71,11 +72,11 @@ jobs:
       - run:
           name: Install deps and run unit and integration tests
           command: |
-            python3 -m py.test --cov=dane_discovery --cov-report=xml --cov-report=term-missing -v
+            python3 -m pytest --cov=dane_discovery --cov-report=xml --cov-report=term-missing -v
   
   build_and_test_with_coverage:
     docker:
-      - image: circleci/python:3.8
+      - image: cimg/python:3.11
     steps:
       - checkout
       - run:
@@ -101,14 +102,14 @@ jobs:
             curl -L https://codeclimate.com/downloads/test-reporter/test-reporter-latest-linux-amd64 > ./cc-test-reporter
             chmod +x ./cc-test-reporter
             ./cc-test-reporter before-build
-            python3 -m py.test --cov=dane_discovery --cov-report=xml --cov-report=term-missing
+            python3 -m pytest --cov=dane_discovery --cov-report=xml --cov-report=term-missing
             ./cc-test-reporter format-coverage -t coverage.py ./coverage.xml
             ./cc-test-reporter upload-coverage
             ./cc-test-reporter after-build --exit-code $?
 
   build_docs:
     docker:
-      - image: circleci/python:3.8
+      - image: cimg/python:3.11
     steps:
       - checkout
       - run:
@@ -130,7 +131,7 @@ jobs:
 
   packaging_test:
     docker:
-      - image: circleci/python:3.8
+      - image: cimg/python:3.11
     steps:
       - checkout
       - run:
@@ -147,7 +148,7 @@ jobs:
 
   deploy:
     docker:
-      - image: circleci/python:3.8
+      - image: cimg/python:3.11
     steps:
       - checkout
       - run:
