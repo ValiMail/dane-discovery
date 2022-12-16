@@ -102,7 +102,7 @@ jobs:
             curl -L https://codeclimate.com/downloads/test-reporter/test-reporter-latest-linux-amd64 > ./cc-test-reporter
             chmod +x ./cc-test-reporter
             ./cc-test-reporter before-build
-            python3 -m py.test --cov=dane_discovery --cov-report=xml --cov-report=term-missing
+            python3 -m pytest --cov=dane_discovery --cov-report=xml --cov-report=term-missing
             ./cc-test-reporter format-coverage -t coverage.py ./coverage.xml
             ./cc-test-reporter upload-coverage
             ./cc-test-reporter after-build --exit-code $?
