@@ -44,7 +44,7 @@ setup(name=PROJECT_NAME,
               "dane_discovery_get_ca_certificates = dane_discovery.scripts.dane_discovery_get_ca_certificates:main"
           ]
       },
-      install_requires=["dnspython==2.2.1", 
+      install_requires=["dnspython==2.3.0", 
                         "cryptography>=3,<38",
                         "requests>=2.24,<2.28",
                         "forcediphttpsadapter"],
